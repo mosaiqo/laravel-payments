@@ -1,0 +1,49 @@
+{
+    "name": "mosaiqo/laravel-payments",
+    "version": "1.0.0",
+    "authors": [
+        {
+            "name": "Boudy de Geer",
+            "email": "boudydegeer@mosaiqo.com"
+        }
+    ],
+    "require": {
+        "php": "~8.1.0|~8.2.0|~8.3.0",
+        "guzzlehttp/guzzle": "^7.0",
+        "laravel/framework": "^11.0",
+        "laravel/cashier": "^15.3",
+        "lemonsqueezy/laravel": "^1.6",
+        "laravel/prompts": "^0.1",
+        "moneyphp/money": "^4.0",
+        "nesbot/carbon": "^2.0|^3.0"
+    },
+    "require-dev": {
+        "mockery/mockery": "^1.6",
+        "orchestra/testbench": "^8.0|^9.0",
+        "pestphp/pest": "^2.0",
+        "pestphp/pest-plugin-type-coverage": "^2.8",
+        "pestphp/pest-plugin-watch": "^2.1"
+    },
+    "suggest": {
+        "ext-intl": "Allows for more locales besides the default \"en\" when formatting money values."
+    },
+    "autoload": {
+        "psr-4": {
+            "Mosaiqo\\LaravelPayments\\": "src/",
+            "Mosaiqo\\LaravelPayments\\Database\\Factories\\": "database/factories/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
