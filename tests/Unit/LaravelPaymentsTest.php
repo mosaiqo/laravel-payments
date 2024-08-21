@@ -2,11 +2,13 @@
 
 use Mosaiqo\LaravelPayments\Exceptions\MissingProvider;
 use Mosaiqo\LaravelPayments\Http\Middleware\LemonSqueezyVerifyWebhookSignature;
+use Mosaiqo\LaravelPayments\Http\Middleware\StripeVerifyWebhookSignature;
 use Mosaiqo\LaravelPayments\LaravelPayments;
 use Mosaiqo\LaravelPayments\Models\Customer;
 use Mosaiqo\LaravelPayments\Models\Order;
 use Mosaiqo\LaravelPayments\Models\Subscription;
 use Mosaiqo\LaravelPayments\WebhookHandlers\LemonSqueezyWebhookHandler;
+use Mosaiqo\LaravelPayments\WebhookHandlers\StripeWebhookHandler;
 
 uses(\Tests\TestCase::class);
 
@@ -36,7 +38,7 @@ it('expects a correct provider config to be set', function () {
 });
 
 
-describe('set custom models', function () {
+describe('General', function () {
     afterEach(function () {
         LaravelPayments::useCustomerModel(Customer::class);
         LaravelPayments::useOrderModel(Order::class);
@@ -59,7 +61,7 @@ describe('set custom models', function () {
     });
 });
 
-describe('set custom webhook handler', function () {
+describe('Provider: LemonSqueezy', function () {
     beforeEach(function () {
         config()->set([
             'payments.provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY
@@ -69,6 +71,7 @@ describe('set custom webhook handler', function () {
         LaravelPayments::useLemonSqueezyWebhookHandler(LemonSqueezyWebhookHandler::class);
         LaravelPayments::useLemonSqueezyVerifyWebhookSignature(LemonSqueezyVerifyWebhookSignature::class);
     });
+
     it('can set a different webhook handler', function () {
         LaravelPayments::useLemonSqueezyWebhookHandler('FakeWebhookHandler');
         expect(LaravelPayments::resolveProviderWebhookHandler())->toBe('FakeWebhookHandler');
@@ -78,4 +81,26 @@ describe('set custom webhook handler', function () {
         LaravelPayments::useLemonSqueezyVerifyWebhookSignature('FakeVerifyWebhookSignature');
         expect(LaravelPayments::resolveProviderSignatureMiddleware())->toBe('FakeVerifyWebhookSignature');
     });
-});
+})->group('lemon-squeezy');
+
+describe('Provider: Stripe', function () {
+    beforeEach(function () {
+        config()->set([
+            'payments.provider' => LaravelPayments::PROVIDER_STRIPE
+        ]);
+    });
+    afterEach(function () {
+        LaravelPayments::useStripeWebhookHandler(StripeWebhookHandler::class);
+        LaravelPayments::useStripeVerifyWebhookSignature(StripeVerifyWebhookSignature::class);
+    });
+
+    it('can set a different webhook handler', function () {
+        LaravelPayments::useStripeWebhookHandler('FakeWebhookHandler');
+        expect(LaravelPayments::resolveProviderWebhookHandler())->toBe('FakeWebhookHandler');
+    });
+
+    it('can set a different verify webhook signature', function () {
+        LaravelPayments::useStripeVerifyWebhookSignature('FakeVerifyWebhookSignature');
+        expect(LaravelPayments::resolveProviderSignatureMiddleware())->toBe('FakeVerifyWebhookSignature');
+    });
+})->group('stripe');

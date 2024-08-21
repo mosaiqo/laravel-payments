@@ -11,6 +11,8 @@ class User extends Authenticatable
 {
     use Billable, HasFactory;
 
+    protected $guarded = [];
+
     public function getKey()
     {
         return 'user_123';

@@ -14,7 +14,7 @@ class OrderCreated
     /**
      * The billable entity.
      */
-    public Model $billable;
+    public ?Model $billable;
 
     /**
      * The order entity.
@@ -28,7 +28,7 @@ class OrderCreated
      */
     public array $payload;
 
-    public function __construct(Model $billable, ?Order $order, array $payload)
+    public function __construct(?Model $billable, ?Order $order, array $payload)
     {
         $this->billable = $billable;
         $this->order = $order;

@@ -7,7 +7,7 @@ use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 use Mosaiqo\LaravelPayments\Models\Subscription;
 
-class SubscriptionCancelled
+class SubscriptionCanceled
 {
     use Dispatchable, SerializesModels;
 

@@ -38,6 +38,13 @@ final class PaymentsWebhookController extends Controller
 
         $payload = $request->all();
         WebhookReceived::dispatch($payload);
+
+        if (LaravelPayments::$asyncWebhooks) {
+            LaravelPayments::queueWebhook($request);
+            WebhookHandled::dispatch($payload);
+            return response('Webhook was handled.');
+        }
+
         $handler = LaravelPayments::resolveProviderWebhookHandler();
 
         if ($handler) {
@@ -53,13 +60,13 @@ final class PaymentsWebhookController extends Controller
             } catch (HandleEventMethodNotImplemented $e) {
                 WebhookFailed::dispatch($payload, $e);
                 return response('Webhook skipped no handle method in handler.');
-            // @codeCoverageIgnoreStart
-            } catch (\Exception $e) {
+                // @codeCoverageIgnoreStart
+            }
+            catch (\Exception $e) {
                 WebhookFailed::dispatch($payload, $e);
                 return response('Webhook failed to be handled.');
             }
             // @codeCoverageIgnoreEnd
-
             WebhookHandled::dispatch($payload);
             return response('Webhook was handled.');
         }

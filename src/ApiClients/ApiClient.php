@@ -12,7 +12,8 @@ class ApiClient
 
     protected function clients() {
         return [
-            LaravelPayments::PROVIDER_LEMON_SQUEEZY => LemonSqueezyApiClient::class
+            LaravelPayments::PROVIDER_LEMON_SQUEEZY => LemonSqueezyApiClient::class,
+            LaravelPayments::PROVIDER_STRIPE => StripeApiClient::class
         ];
     }
 

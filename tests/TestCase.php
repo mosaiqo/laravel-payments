@@ -3,6 +3,7 @@
 namespace Tests;
 
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Foundation\Testing\Concerns\InteractsWithExceptionHandling;
 use Mosaiqo\LaravelPayments\LaravelPaymentsServiceProvider;
 use Orchestra\Testbench\Concerns\WithLaravelMigrations;
 use Orchestra\Testbench\TestCase as OrchestraTestCase;
@@ -12,6 +13,7 @@ use Tests\Fixtures\User;
 class TestCase extends OrchestraTestCase
 {
     use WithLaravelMigrations;
+    use InteractsWithExceptionHandling;
 
     protected function getPackageProviders($app)
     {

@@ -25,7 +25,95 @@ it('can initiate a new checkout', function () {
 
     expect($checkout)
         ->toBeInstanceOf(Checkout::class)
-        ->and($checkout->url())->toBe('https://lemon.lemonsqueezy.com/checkout/buy/variant_123');
+        ->and($checkout->get())
+        ->toMatchArray([
+            'data' => [
+                'attributes' => [
+                    'url' => 'https://lemon.lemonsqueezy.com/checkout/buy/variant_123',
+                ],
+            ],
+        ]);
+});
+
+it('can returns a new checkout attributes', function () {
+    config()->set([
+        'payments.provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+        'payments.providers.lemon-squeezy.store' => 'store_12345',
+        'payments.providers.lemon-squeezy.api_key' => 'fake_key',
+    ]);
+
+    $checkout = new Checkout('store_24398', 'variant_123');
+
+    Http::fake([
+        'api.lemonsqueezy.com/v1/checkouts' => Http::response([
+            'data' => [
+                'attributes' => [
+                    'preview' => [
+                        'foo' => 'bar',
+                    ],
+                'url' => 'https://lemon.lemonsqueezy.com/checkout/buy/variant_123']
+            ],
+        ]),
+    ]);
+
+    expect($checkout)
+        ->toBeInstanceOf(Checkout::class)
+        ->and($checkout->attributes())
+        ->toMatchArray([
+            'preview' => [
+                'foo' => 'bar',
+            ],
+            'url' => 'https://lemon.lemonsqueezy.com/checkout/buy/variant_123',
+        ]);
+});
+
+it('can returns a new checkout preview', function () {
+    config()->set([
+        'payments.provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+        'payments.providers.lemon-squeezy.store' => 'store_12345',
+        'payments.providers.lemon-squeezy.api_key' => 'fake_key',
+    ]);
+
+    $checkout = new Checkout('store_24398', 'variant_123');
+
+    Http::fake([
+        'api.lemonsqueezy.com/v1/checkouts' => Http::response([
+            'data' => ['attributes' => [
+                'preview' => [
+                    'foo' => 'bar',
+                ],
+                'url' => 'https://lemon.lemonsqueezy.com/checkout/buy/variant_123']
+            ],
+        ]),
+    ]);
+
+    expect($checkout)
+        ->toBeInstanceOf(Checkout::class)
+        ->and($checkout->preview())
+        ->toMatchArray([
+            'foo' => 'bar'
+        ]);
+});
+
+it('can returns a new checkout url', function () {
+    config()->set([
+        'payments.provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+        'payments.providers.lemon-squeezy.store' => 'store_12345',
+        'payments.providers.lemon-squeezy.api_key' => 'fake_key',
+    ]);
+
+    $checkout = new Checkout('store_24398', 'variant_123');
+
+    Http::fake([
+        'api.lemonsqueezy.com/v1/checkouts' => Http::response([
+            'data' => ['attributes' => ['url' => 'https://lemon.lemonsqueezy.com/checkout/buy/variant_123']],
+        ]),
+    ]);
+
+    expect($checkout)
+        ->toBeInstanceOf(Checkout::class)
+        ->and($checkout->url())
+        ->toBe('https://lemon.lemonsqueezy.com/checkout/buy/variant_123');
 });
 
 it('can be redirected', function () {
@@ -53,14 +141,32 @@ it('can turn off toggles', function () {
         'payments.providers.lemon-squeezy.api_key' => 'fake_key',
     ]);
     $checkout = Checkout::make('store_24398', 'variant_123')
+        ->withoutPreview()
         ->withoutLogo()
         ->withoutMedia()
         ->withoutDescription()
         ->withoutDiscountField();
+
     Http::fake([
-        'api.lemonsqueezy.com/v1/checkouts' => Http::response([
-            'data' => ['attributes' => ['url' => 'https://lemon.lemonsqueezy.com/checkout/buy/variant_123']],
-        ]),
+        'api.lemonsqueezy.com/v1/checkouts' => function (Request $request) {
+            expect(collect($request->data())->pluck('attributes')->first())
+                ->toMatchArray([
+                    "preview" => false,
+                    'checkout_options' => [
+                        'logo' => false,
+                        'embed' => false,
+                        'media' => false,
+                        'desc' => false,
+                        'discount' => false,
+                        'dark' => false,
+                        'subscription_preview' => true
+                    ],
+                ]);
+
+            return Http::response([
+                'data' => ['attributes' => ['url' => 'https://lemon.lemonsqueezy.com/checkout/buy/variant_123']],
+            ]);
+        },
     ]);
 
     expect($checkout->url())->toBe('https://lemon.lemonsqueezy.com/checkout/buy/variant_123');
@@ -111,6 +217,65 @@ it('can include custom data', function () {
         ->toBe('https://lemon.lemonsqueezy.com/checkout/buy/variant_123');
 });
 
+it('can limit to specific variants', function () {
+    config()->set([
+        'payments.provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+        'payments.providers.lemon-squeezy.store' => 'store_12345',
+        'payments.providers.lemon-squeezy.api_key' => 'fake_key',
+    ]);
+    $checkout = Checkout::make('store_24398', 'variant_123')
+        ->withEnabledVariants([
+            'var_789',
+            'var_456'
+        ]);
+
+    Http::fake([
+        'api.lemonsqueezy.com/v1/checkouts' => function (Request $request) {
+            expect(collect($request->data())->pluck('attributes')->first())
+                ->toMatchArray([
+                    'product_options' => [
+                        'enabled_variants' => ['var_789', 'var_456']
+                    ],
+                ]);
+
+            return Http::response([
+                'data' => ['attributes' => ['url' => 'https://lemon.lemonsqueezy.com/checkout/buy/variant_123']],
+            ]);
+        },
+    ]);
+
+    expect($checkout->url())
+        ->toBe('https://lemon.lemonsqueezy.com/checkout/buy/variant_123');
+});
+
+it('can disable variants', function () {
+    config()->set([
+        'payments.provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+        'payments.providers.lemon-squeezy.store' => 'store_12345',
+        'payments.providers.lemon-squeezy.api_key' => 'fake_key',
+    ]);
+    $checkout = Checkout::make('store_24398', 'variant_123')
+        ->withoutVariants();
+
+    Http::fake([
+        'api.lemonsqueezy.com/v1/checkouts' => function (Request $request) {
+            expect(collect($request->data())->pluck('attributes')->first())
+                ->toMatchArray([
+                    'product_options' => [
+                        'enabled_variants' => ['variant_123']
+                    ],
+                ]);
+
+            return Http::response([
+                'data' => ['attributes' => ['url' => 'https://lemon.lemonsqueezy.com/checkout/buy/variant_123']],
+            ]);
+        },
+    ]);
+
+    expect($checkout->url())
+        ->toBe('https://lemon.lemonsqueezy.com/checkout/buy/variant_123');
+});
+
 it('can include prefilled fields and custom data', function () {
     config()->set([
         'payments.provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
@@ -139,4 +304,23 @@ it('can include prefilled fields and custom data', function () {
 
     expect($checkout->url())
         ->toBe('https://lemon.lemonsqueezy.com/checkout/buy/variant_123');
+});
+
+it('can be used as a response', function () {
+    config()->set([
+        'payments.provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+        'payments.providers.lemon-squeezy.store' => 'store_12345',
+        'payments.providers.lemon-squeezy.api_key' => 'fake_key',
+    ]);
+
+    Http::fake([
+        'api.lemonsqueezy.com/v1/checkouts' => Http::response([
+            'data' => ['attributes' => ['url' => 'https://lemon.lemonsqueezy.com/checkout/buy/variant_123']],
+        ]),
+    ]);
+
+    $checkout = Checkout::make('store_24398', 'variant_123');
+
+    expect($checkout->toResponse('fake_request'))
+        ->toBeInstanceOf(RedirectResponse::class);
 });

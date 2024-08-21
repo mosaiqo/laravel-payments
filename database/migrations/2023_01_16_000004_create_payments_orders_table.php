@@ -10,8 +10,8 @@ return new class extends Migration
     {
         Schema::create('payments_orders', function (Blueprint $table) {
             $table->id();
-            $table->morphs('billable');
-            $table->string('provider_id')->unique();
+            $table->nullableMorphs('billable');
+            $table->string('provider_id');
             $table->string('provider');
             $table->string('customer_id');
             $table->uuid('identifier')->unique();

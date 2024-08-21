@@ -113,7 +113,6 @@ it('can swap a subscription', function () {
     expect($subscription)->toMatchArray(['product_id' => '12345', 'variant_id' => '67890']);
 });
 
-
 it('avoids prorating on subscription swap', function () {
     config()->set([
         'payments.provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
@@ -146,7 +145,6 @@ it('avoids prorating on subscription swap', function () {
     $subscription = $subscription->noProrate()->swap('12345', '67890');
     expect($subscription)->toMatchArray(['product_id' => '12345', 'variant_id' => '67890']);
 });
-
 
 it('forces prorating on subscription swap', function () {
     config()->set([
@@ -239,7 +237,7 @@ it('can cancel a subscription', function () {
             return Http::response([
                 'data' => [
                     'attributes' => array_merge($subscription->toArray(), [
-                        'status' => Subscription::STATUS_CANCELLED,
+                        'status' => Subscription::STATUS_CANCELED,
                     ]),
                 ],
             ]);
@@ -247,7 +245,7 @@ it('can cancel a subscription', function () {
     ]);
 
     $subscription = $subscription->cancel();
-    expect($subscription)->toMatchArray(['provider_id' => '12345', 'status' => Subscription::STATUS_CANCELLED]);
+    expect($subscription)->toMatchArray(['provider_id' => '12345', 'status' => Subscription::STATUS_CANCELED]);
 });
 
 it('can resume a subscription', function () {
@@ -259,7 +257,7 @@ it('can resume a subscription', function () {
 
     $subscription = Subscription::factory()->create([
         'provider_id' => '12345',
-        'status' => Subscription::STATUS_CANCELLED,
+        'status' => Subscription::STATUS_CANCELED,
     ]);
 
     Http::fake([
@@ -285,6 +283,8 @@ it('can resume a subscription', function () {
 });
 
 it('can\'t resume a subscription if expired', function () {
+    $this->expectException(LogicException::class);
+    $this->expectExceptionMessage('Cannot resume an expired subscription.');
     config()->set([
         'payments.provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
         'payments.providers.lemon-squeezy.store' => 'store_12345',
@@ -299,9 +299,7 @@ it('can\'t resume a subscription if expired', function () {
     $subscription = $subscription->resume();
     expect($subscription)->toMatchArray(['provider_id' => '12345', 'status' => Subscription::STATUS_ACTIVE]);
 
-})
-    ->expectException(LogicException::class)
-    ->expectExceptionMessage('Cannot resume an expired subscription.');
+});
 
 it('can pause a subscription', function () {
     config()->set([
@@ -460,7 +458,7 @@ it('can returns only correct when scoped', function () {
         ['status' => Subscription::STATUS_PAUSED],
         ['status' => Subscription::STATUS_PAST_DUE],
         ['status' => Subscription::STATUS_UNPAID],
-        ['status' => Subscription::STATUS_CANCELLED],
+        ['status' => Subscription::STATUS_CANCELED],
         ['status' => Subscription::STATUS_EXPIRED],
     ]);
 
@@ -494,10 +492,10 @@ it('can returns only correct when scoped', function () {
         expect($subscription->status)->toBe(Subscription::STATUS_UNPAID);
     });
 
-    $items = Subscription::query()->cancelled()->get();
+    $items = Subscription::query()->canceled()->get();
     expect($items->count())->toBe(1);
     $items->each(function ($subscription) {
-        expect($subscription->status)->toBe(Subscription::STATUS_CANCELLED);
+        expect($subscription->status)->toBe(Subscription::STATUS_CANCELED);
     });
 
     $items = Subscription::query()->expired()->get();
@@ -513,7 +511,7 @@ it('can determine if the subscription is within grace period', function () {
         'payments.providers.lemon-squeezy.store' => 'store_12345',
         'payments.providers.lemon-squeezy.api_key' => 'fake_key',
     ]);
-    $subscription = Subscription::factory()->create(['status' => Subscription::STATUS_CANCELLED, 'ends_at' => now()->add(1, 'day')]);
+    $subscription = Subscription::factory()->create(['status' => Subscription::STATUS_CANCELED, 'ends_at' => now()->add(1, 'day')]);
 
     expect($subscription->onGracePeriod())->toBeTrue();
 });

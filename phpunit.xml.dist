@@ -24,5 +24,7 @@
         <env name="DB_CONNECTION" value="testing"/>
         <env name="LEMON_SQUEEZY_API_KEY" value="fake"/>
         <env name="LEMON_SQUEEZY_STORE" value="fake"/>
+        <env name="STRIPE_API_KEY" value="pk_test_51PjKU2ECF9HMZEaPu5CGJVksu4ilnz869xoDjAJ3db0VmgX3Jw9qBaxspB7HY5jDCN8sIKmM0NH9zBmljaOaed9800r3uAAZNb"/>
+        <env name="STRIPE_API_SECRET" value="sk_test_51PjKU2ECF9HMZEaP76FMCgDUOP7sedxAhld6dJ9EWIuPsfLDC1SQPTUBKTrhcBUhwR5W4lEV7sinP7Lsa7S5ZfML00vZ16aR37"/>
     </php>
 </phpunit>

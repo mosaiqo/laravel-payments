@@ -10,14 +10,16 @@ return new class extends Migration
     {
         Schema::create('payments_customers', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('billable_id');
-            $table->string('billable_type');
+            $table->unsignedBigInteger('billable_id')->nullable();
+            $table->string('billable_type')->nullable();
             $table->string('provider');
-            $table->string('provider_id')->nullable()->unique();
+            $table->string('provider_id')->nullable();
+            $table->string('name')->nullable();
+            $table->string('email')->nullable();
             $table->timestamp('trial_ends_at')->nullable();
             $table->timestamps();
 
-            $table->unique(['billable_id', 'billable_type']);
+            $table->unique(['provider', 'provider_id', 'billable_id', 'billable_type'], 'unique_customer');
         });
     }
 

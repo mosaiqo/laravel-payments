@@ -7,6 +7,7 @@ use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Mosaiqo\LaravelPayments\Models\Concerns\Prorates;
 use Mosaiqo\LaravelPayments\LaravelPayments;
@@ -14,10 +15,12 @@ use Mosaiqo\LaravelPayments\LaravelPayments;
 use Mosaiqo\LaravelPayments\Database\Factories\SubscriptionFactory;
 
 /**
- * @property mixed   $provider_id
- * @property ?string $status
- * @property mixed   $pause_mode
- * @property ?string $product_id
+ * @property ?string                                  $provider_id
+ * @property ?string                                  $status
+ * @property boolean                                  $pause_mode
+ * @property ?string                                  $product_id
+ * @property string                                   $provider_price_id
+ * @property \Illuminate\Database\Eloquent\Collection $items
  */
 class Subscription extends Model
 {
@@ -34,7 +37,7 @@ class Subscription extends Model
 
     const STATUS_UNPAID = 'unpaid';
 
-    const STATUS_CANCELLED = 'cancelled';
+    const STATUS_CANCELED = 'canceled';
 
     const STATUS_EXPIRED = 'expired';
 
@@ -72,13 +75,20 @@ class Subscription extends Model
     }
 
     /**
+     * Get the items for the subscription.
+     */
+    public function items(): HasMany
+    {
+        return $this->hasMany(SubscriptionItem::class);
+    }
+
+    /**
      * Filter query by on trial.
      */
     public function scopeOnTrial(Builder $query): void
     {
         $query->where('status', self::STATUS_ON_TRIAL);
     }
-
 
     /**
      * Filter query by on active.
@@ -104,7 +114,7 @@ class Subscription extends Model
         $query->where('status', self::STATUS_PAST_DUE);
     }
 
-   /**
+    /**
      * Filter query by unpaid.
      */
     public function scopeUnpaid(Builder $query): void
@@ -113,14 +123,14 @@ class Subscription extends Model
     }
 
     /**
-     * Filter query by cancelled.
+     * Filter query by canceled.
      */
-    public function scopeCancelled(Builder $query): void
+    public function scopeCanceled(Builder $query): void
     {
-        $query->where('status', self::STATUS_CANCELLED);
+        $query->where('status', self::STATUS_CANCELED);
     }
 
-   /**
+    /**
      * Filter query by expired.
      */
     public function scopeExpired(Builder $query): void
@@ -128,12 +138,12 @@ class Subscription extends Model
         $query->where('status', self::STATUS_EXPIRED);
     }
 
-     /**
+    /**
      * Filter query by expired.
      */
     public function onGracePeriod(): bool
     {
-        return $this->cancelled() && $this->ends_at?->isFuture();
+        return $this->canceled() && $this->ends_at?->isFuture();
     }
 
     /**
@@ -158,7 +168,7 @@ class Subscription extends Model
 
     public function endTrial(): self
     {
-        return  $this->anchorBillingCycleOn(0);
+        return $this->anchorBillingCycleOn(0);
     }
 
 
@@ -247,6 +257,7 @@ class Subscription extends Model
      */
     public function sync(array $attributes): self
     {
+        logger()->info('Syncing subscription', $attributes);
         $this->update([
             'status' => $attributes['status'],
             'product_id' => (string)$attributes['product_id'],
@@ -289,7 +300,7 @@ class Subscription extends Model
         return $this->active() ||
             $this->onTrial() ||
             $this->pastDue() ||
-            $this->cancelled() ||
+            $this->canceled() ||
             ($this->paused() && $this->pause_mode === 'free');
     }
 
@@ -302,11 +313,11 @@ class Subscription extends Model
     }
 
     /**
-     * Check if the subscription is cancelled.
+     * Check if the subscription is canceled.
      */
-    public function cancelled(): bool
+    public function canceled(): bool
     {
-        return $this->status === self::STATUS_CANCELLED;
+        return $this->status === self::STATUS_CANCELED;
     }
 
     /**
@@ -347,5 +358,32 @@ class Subscription extends Model
     public function hasVariant(string $variantId): bool
     {
         return $this->variant_id === $variantId;
+    }
+
+    /**
+     * Determine if the subscription has multiple prices.
+     *
+     * @return bool
+     */
+    public function hasMultiplePrices(): bool
+    {
+        return is_null($this->provider_price_id);
+    }
+
+    /**
+     * Determine if the subscription has a specific price.
+     *
+     * @param string $price
+     *
+     * @return bool
+     */
+    public function hasPrice(string $price): bool
+    {
+        if ($this->hasMultiplePrices()) {
+            return $this->items->contains(function (SubscriptionItem $item) use ($price) {
+                return $item->provider_price_id === $price;
+            });
+        }
+        return $this->provider_price_id === $price;
     }
 }

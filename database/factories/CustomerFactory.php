@@ -3,6 +3,7 @@
 namespace Mosaiqo\LaravelPayments\Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Mosaiqo\LaravelPayments\LaravelPayments;
 use  Mosaiqo\LaravelPayments\Models\Customer;
 
 class CustomerFactory extends Factory
@@ -21,11 +22,12 @@ class CustomerFactory extends Factory
      */
     public function definition(): array
     {
+        $provider = LaravelPayments::getProvider() ?? $this->faker->randomElement(LaravelPayments::allowedProviders());
         return [
             'billable_id' => rand(1, 1000),
-            'billable_type' => 'App\\Models\\User',
+            'billable_type' => LaravelPayments::resolveBillableModel() ?? 'App\\Models\\User',
             'provider_id' => rand(1, 1000),
-            'provider' => $this->faker->randomElement(['lemon-squeezy', 'stripe', 'paypal']),
+            'provider' => $provider,
             'trial_ends_at' => null,
         ];
     }

@@ -30,12 +30,12 @@ it('can determine if the subscription is past due', function () {
     expect($subscription->pastDue())->toBeTrue();
 });
 
-it('can determine if the subscription is cancelled', function () {
+it('can determine if the subscription is canceled', function () {
     $subscription = new Subscription();
-    expect($subscription->cancelled())->toBeFalse();
-    $subscription->status = Subscription::STATUS_CANCELLED;
+    expect($subscription->canceled())->toBeFalse();
+    $subscription->status = Subscription::STATUS_CANCELED;
 
-    expect($subscription->cancelled())->toBeTrue();
+    expect($subscription->canceled())->toBeTrue();
 });
 
 it('can determine if the subscription is paused', function () {

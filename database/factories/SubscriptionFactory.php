@@ -4,7 +4,9 @@ namespace  Mosaiqo\LaravelPayments\Database\Factories;
 
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Mosaiqo\LaravelPayments\LaravelPayments;
 use  Mosaiqo\LaravelPayments\Models\Subscription;
+use Mosaiqo\LaravelPayments\Models\SubscriptionItem;
 
 class SubscriptionFactory extends Factory
 {
@@ -22,13 +24,13 @@ class SubscriptionFactory extends Factory
      */
     public function definition(): array
     {
-
+        $provider = LaravelPayments::getProvider() ?? $this->faker->randomElement(LaravelPayments::allowedProviders());
         return [
             'billable_id' => rand(1, 1000),
-            'billable_type' => 'App\\Models\\User',
+            'billable_type' => LaravelPayments::resolveBillableModel() ?? 'App\\Models\\User',
             'type' => Subscription::DEFAULT_TYPE,
             'provider_id' => rand(1, 1000),
-            'provider' => $this->faker->randomElement(['lemonsqueezy', 'paddle']),
+            'provider' => $provider,
             'status' => Subscription::STATUS_ACTIVE,
             'product_id' => rand(1, 1000),
             'variant_id' => rand(1, 1000),
@@ -110,12 +112,12 @@ class SubscriptionFactory extends Factory
     }
 
     /**
-     * Mark the subscription as cancelled.
+     * Mark the subscription as canceled.
      */
-    public function cancelled(): self
+    public function canceled(): self
     {
         return $this->state([
-            'status' => Subscription::STATUS_CANCELLED,
+            'status' => Subscription::STATUS_CANCELED,
             'ends_at' => now(),
         ]);
     }

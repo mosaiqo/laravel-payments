@@ -10,11 +10,12 @@ return new class extends Migration
     {
         Schema::create('payments_subscriptions', function (Blueprint $table) {
             $table->id();
-            $table->morphs('billable');
+            $table->nullableMorphs('billable');
             $table->string('type');
             $table->string('provider_id')->unique();
             $table->string('provider');
             $table->string('status');
+            $table->string('price')->nullable();
             $table->string('product_id');
             $table->string('variant_id');
             $table->string('card_brand')->nullable();

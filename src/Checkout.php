@@ -3,17 +3,14 @@
 namespace Mosaiqo\LaravelPayments;
 
 use DateTimeInterface;
+use Dflydev\DotAccessData\Data;
+use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Redirect;
-use Illuminate\Testing\Constraints\ArraySubset;
-use Mosaiqo\LaravelPayments\ApiClients\LemonSqueezyApiClient;
 use Mosaiqo\LaravelPayments\Exceptions\ReservedCustomKeys;
-use Pest\Expectation;
-use PHPUnit\Framework\Assert as PHPUnit;
 
-class Checkout
+class Checkout implements Responsable
 {
-
     private bool $embed = false;
 
     private bool $media = true;
@@ -28,11 +25,15 @@ class Checkout
 
     private bool $subscriptionPreview = true;
 
+    private bool $preview = true;
+
     private array $checkoutData = [];
 
     private ?string $buttonColor;
 
     private array $custom = [];
+
+    private array $enabledVariants = [];
 
     private ?string $productName = null;
 
@@ -47,7 +48,6 @@ class Checkout
     private ?int $customPrice = null;
 
     public function __construct(private readonly string $store, private readonly string $variant) {}
-
 
     public static function make(string $store, string $variant): static
     {
@@ -76,6 +76,13 @@ class Checkout
         return $this;
     }
 
+    public function withoutVariants(): self
+    {
+        $this->enabledVariants = [(string) $this->variant];
+
+        return $this;
+    }
+
     public function withoutDiscountField(): self
     {
         $this->discount = false;
@@ -93,6 +100,12 @@ class Checkout
     public function withoutSubscriptionPreview(): self
     {
         $this->subscriptionPreview = false;
+
+        return $this;
+    }
+    public function withoutPreview(): self
+    {
+        $this->preview = false;
 
         return $this;
     }
@@ -135,9 +148,20 @@ class Checkout
         return $this;
     }
 
-    public function withDiscountCode(string $discountCode): self
+    public function withDiscountCode(?string $discountCode): self
     {
+        if (is_null($discountCode)) {
+            return $this;
+        }
+
         $this->checkoutData['discount_code'] = $discountCode;
+
+        return $this;
+    }
+
+    public function withEnabledVariants(array $variants): self
+    {
+        $this->enabledVariants = $variants;
 
         return $this;
     }
@@ -207,10 +231,12 @@ class Checkout
 
     private function preparePayload(): array
     {
+        $config = LaravelPayments::resolveProviderConfig();
         return [
             'data' => [
                 'type' => 'checkouts',
                 'attributes' => [
+                    'preview' => $this->preview,
                     'custom_price' => $this->customPrice,
                     'checkout_data' => array_merge(
                         array_filter($this->checkoutData, fn (mixed $value) => $value !== ''),
@@ -225,14 +251,13 @@ class Checkout
                         'dark' => $this->dark,
                         'subscription_preview' => $this->subscriptionPreview,
                         'button_color' => $this->buttonColor ?? null,
-                    ], function (mixed $value) {
-                        return ! is_null($value);
-                    }),
+                    ], fn (mixed $value) => ! is_null($value)),
                     'product_options' => array_filter([
+                        'enabled_variants' => array_filter($this->enabledVariants),
                         'name' => $this->productName,
                         'description' => $this->description,
                         'receipt_thank_you_note' => $this->thankYouNote,
-                        'redirect_url' => $this->redirectUrl ?? config('lemon-squeezy.redirect_url'),
+                        'redirect_url' => $this->redirectUrl ?? $config['redirect_url'] ?? null,
                     ]),
                     'expires_at' => isset($this->expiresAt) ? $this->expiresAt->format(DateTimeInterface::ATOM) : null,
                 ],
@@ -254,19 +279,42 @@ class Checkout
         ];
     }
 
+    public function get($key = null): ?array
+    {
+        $response = LaravelPayments::api()->createCheckout($this->preparePayload());
+
+        return $response->json($key);
+    }
+
+    public function attributes()
+    {
+        $response = $this->get();
+        return $response['data']['attributes'];
+    }
+
+    public function preview()
+    {
+        $response = $this->attributes();
+        return $response['preview'];
+    }
 
     /**
      * @throws \Mosaiqo\LaravelPayments\Exceptions\ApiError
      */
     public function url(): ?string
     {
-        $response = LaravelPayments::api()->createCheckout($this->preparePayload());
+        $response = $this->attributes();
 
-        return $response['data']['attributes']['url'];
+        return $response['url'];
     }
 
     public function redirect(): RedirectResponse
     {
         return Redirect::to($this->url(), 303);
+    }
+
+    public function toResponse($request) :RedirectResponse
+    {
+        return $this->redirect();
     }
 }

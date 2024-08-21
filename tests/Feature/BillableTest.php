@@ -4,6 +4,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Mosaiqo\LaravelPayments\LaravelPayments;
 use Mosaiqo\LaravelPayments\Models\Customer;
+use Mosaiqo\LaravelPayments\Models\Subscription;
 use Tests\Fixtures\User;
 
 it('can generate a checkout for a billable', function () {
@@ -24,7 +25,6 @@ it('can generate a checkout for a billable', function () {
         ->toBe('https://lemon.lemonsqueezy.com/checkout/buy/variant_1234');
 });
 
-
 it('can generate a checkout for a billable with custom data', function () {
     config()->set([
         'payments.provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
@@ -34,8 +34,8 @@ it('can generate a checkout for a billable with custom data', function () {
     Http::fake([
         'api.lemonsqueezy.com/v1/checkouts' => function (Request $request) use ($user) {
             expect(collect($request->data())->pluck('attributes')->first())
-//                ->dd()
                 ->toMatchArray([
+                    'preview' => true,
                     'checkout_options' => [
                         'logo' => true,
                         'embed' => false,
@@ -94,6 +94,7 @@ it('can generate a checkout for a billable with specifics', function () {
         'api.lemonsqueezy.com/v1/checkouts' => function (Request $request) use ($user) {
             expect(collect($request->data())->pluck('attributes')->first())
                 ->toMatchArray([
+                    'preview' => true,
                     'custom_price' => 1234,
                     'checkout_options' => [
                         'logo' => true,
@@ -199,7 +200,6 @@ it('can generate a customer portal link for a billable', function () {
         ->toBe('https://my-store.lemonsqueezy.com/billing?expires=1666869343&signature=xxxxx');
 });
 
-
 it('needs a configured provider create a customer', function () {
     config()->set(['payments.provider' => null]);
 
@@ -218,13 +218,47 @@ it('only allowed providers can be configured', function () {
     $customer = $user->createAsCustomer();
 });
 
-
 it('can determine the generic trial on a billable', function () {
     config()->set(['payments.provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY]);
 
     $user = User::factory()->create();
     $customer = $user->createAsCustomer();
+
     expect($customer)->toBeInstanceOf(Customer::class);
+});
+
+it('gets the current users subscription', function () {
+    config()->set(['payments.provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY]);
+    $user = User::factory()->create();
+    Subscription::factory()->active()
+        ->create([
+            'id' => 1,
+            'provider' => 'lemon-squeezy',
+            'billable_id' => $user->id,
+            'billable_type' => $user->getMorphClass(),
+        ]);
+
+    $subscription = $user->subscription();
+
+    expect($subscription)->toBeInstanceOf(Subscription::class)
+        ->and($subscription->id)->toBe(1)
+        ->and($subscription->provider)->toBe('lemon-squeezy')
+        ->and($subscription->type)->toBe('default');
+});
+
+it('can determine if its subscribed', function () {
+    config()->set(['payments.provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY]);
+    $user = User::factory()->create();
+
+    Subscription::factory()->active()
+        ->create([
+            'id' => 1,
+            'provider' => 'lemon-squeezy',
+            'billable_id' => $user->id,
+            'billable_type' => $user->getMorphClass(),
+        ]);
+
+    expect($user->subscribed())->toBeTrue();
 });
 
 

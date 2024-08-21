@@ -10,7 +10,7 @@ use Mosaiqo\LaravelPayments\Events\LicenseKeyCreated;
 use Mosaiqo\LaravelPayments\Events\LicenseKeyUpdated;
 use Mosaiqo\LaravelPayments\Events\OrderCreated;
 use Mosaiqo\LaravelPayments\Events\OrderRefunded;
-use Mosaiqo\LaravelPayments\Events\SubscriptionCancelled;
+use Mosaiqo\LaravelPayments\Events\SubscriptionCanceled;
 use Mosaiqo\LaravelPayments\Events\SubscriptionCreated;
 use Mosaiqo\LaravelPayments\Events\SubscriptionExpired;
 use Mosaiqo\LaravelPayments\Events\SubscriptionPaused;
@@ -24,7 +24,10 @@ use Mosaiqo\LaravelPayments\Exceptions\HandleEventMethodNotImplemented;
 use Mosaiqo\LaravelPayments\Exceptions\InvalidCustomPayload;
 use Mosaiqo\LaravelPayments\Exceptions\InvalidEventName;
 use Mosaiqo\LaravelPayments\LaravelPayments;
+use Mosaiqo\LaravelPayments\Models\Customer;
 use Mosaiqo\LaravelPayments\Models\Subscription;
+use Tests\Fixtures\User;
+use function DI\string;
 
 class LemonSqueezyWebhookHandler
 {
@@ -68,8 +71,15 @@ class LemonSqueezyWebhookHandler
         $billable = $this->resolveBillable($payload);
         $providerId = $payload['data']['id'];
         $attributes = $payload['data']['attributes'];
+//        dd($billable);
+        if (LaravelPayments::areNonAuthenticatedBillablesAllowed()) {
+            $model = app(LaravelPayments::resolveOrderModel());
+        } else {
+            $model = $billable->orders();
+        }
 
-        $order = $billable->orders()->create([
+
+        $order = $model->create([
             'provider_id' => $providerId,
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
             'customer_id' => $attributes['customer_id'],
@@ -121,33 +131,48 @@ class LemonSqueezyWebhookHandler
     protected function handleSubscriptionCreatedEvent(array $payload): void
     {
         $billable = $this->resolveBillable($payload);
+        if (LaravelPayments::areNonAuthenticatedBillablesAllowed()) {
+            $model = app(LaravelPayments::resolveSubscriptionModel());
+        } else {
+            $model = $billable->subscriptions();
+        }
 
         $data = $payload['data'] ?? null;
         $custom = $payload['meta']['custom_data'] ?? null;
         $attributes = $payload['data']['attributes'];
 
-        $subscription = $billable->subscriptions()->create([
-            'type' => $custom['subscription_type'] ?? Subscription::DEFAULT_TYPE,
-            'provider_id' => $data['id'],
-            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
-            'status' => $attributes['status'],
-            'product_id' => (string) $attributes['product_id'],
-            'variant_id' => (string) $attributes['variant_id'],
-            'card_brand' => $attributes['card_brand'] ?? null,
-            'card_last_four' => $attributes['card_last_four'] ?? null,
-            'trial_ends_at' => $attributes['trial_ends_at'] ? Carbon::make($attributes['trial_ends_at']) : null,
-            'renews_at' => $attributes['renews_at'] ? Carbon::make($attributes['renews_at']) : null,
-            'ends_at' => $attributes['ends_at'] ? Carbon::make($attributes['ends_at']) : null,
-        ]);
+        if ($model->where([
+                'provider_id'=> $data['id'],
+                'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            ])->exists()
+        ) {
+            return;
+        }
 
-
+        try {
+            $subscription = $model->create([
+                'type' => $custom['subscription_type'] ?? Subscription::DEFAULT_TYPE,
+                'provider_id' => $data['id'],
+                'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+                'status' => $attributes['status'],
+                'product_id' => (string) $attributes['product_id'],
+                'variant_id' => (string) $attributes['variant_id'],
+                'card_brand' => $attributes['card_brand'] ?? null,
+                'card_last_four' => $attributes['card_last_four'] ?? null,
+                'trial_ends_at' => $attributes['trial_ends_at'] ? Carbon::make($attributes['trial_ends_at']) : null,
+                'renews_at' => $attributes['renews_at'] ? Carbon::make($attributes['renews_at']) : null,
+                'ends_at' => $attributes['ends_at'] ? Carbon::make($attributes['ends_at']) : null,
+            ]);
+        } catch (\Exception $e) {
+            dump($e->getMessage());
+        }
         // Terminate  the billable's generic trial at the model level if it exists...
-        if (!is_null($billable->customer->trial_ends_at)) {
+        if ($billable && !is_null($billable?->customer?->trial_ends_at)) {
             $billable->customer->update(['trial_ends_at' => null]);
         }
 
         // Set the billable's provide id if it was on generic trial at the model level
-        if (is_null($billable->customer->provider_id)) {
+        if ($billable && is_null($billable?->customer?->provider_id)) {
             $billable->customer->update([
                 'provider_id' => $attributes['customer_id'],
                 'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
@@ -180,12 +205,12 @@ class LemonSqueezyWebhookHandler
     }
 
     /**
-     * Handle the subscription cancelled event.
+     * Handle the subscription canceled event.
      * @param $payload
      *
      * @return void
      */
-    protected function handleSubscriptionCancelledEvent(array $payload): void{
+    protected function handleSubscriptionCanceledEvent(array $payload): void{
         $providerId = $payload['data']['id'];
         $attributes = $payload['data']['attributes'];
 
@@ -195,7 +220,7 @@ class LemonSqueezyWebhookHandler
             $subscription->sync($attributes);
 
             if ($subscription->billable) {
-                SubscriptionCancelled::dispatch($subscription->billable, $subscription, $payload);
+                SubscriptionCanceled::dispatch($subscription->billable, $subscription, $payload);
             }
         }
     }
@@ -382,14 +407,25 @@ class LemonSqueezyWebhookHandler
     private function resolveBillable(array $payload): ?Model
     {
         $custom = $payload['meta']['custom_data'] ?? null;
-        if (!isset($custom) || !is_array($custom) || !isset($custom['billable_id'], $custom['billable_type'])) {
-            throw new InvalidCustomPayload;
+
+        if (!LaravelPayments::areNonAuthenticatedBillablesAllowed()) {
+            if (!isset($custom) || !is_array($custom) || !isset($custom['billable_id'], $custom['billable_type'])) {
+                throw new InvalidCustomPayload;
+            }
+        }
+
+        if (LaravelPayments::areNonAuthenticatedBillablesAllowed()) {
+           $custom = $custom ?? [
+                'billable_id' => null,
+                'billable_type' => null,
+           ];
         }
 
         return $this->findOrCreateCustomer(
             $custom['billable_id'],
-            (string)$custom['billable_type'],
-            (string)$payload['data']['attributes']['customer_id']
+            (string) $custom['billable_type'],
+            (string) $payload['data']['attributes']['customer_id'],
+            $payload
         );
     }
 
@@ -401,17 +437,19 @@ class LemonSqueezyWebhookHandler
      * @param string $customerId
      * @return ?Model
      */
-    private function findOrCreateCustomer(int|string $billableId, string $billableType, string $customerId): ?Model
+    private function findOrCreateCustomer(int|string|null $billableId, ?string $billableType, string $customerId, array $payload = null): ?Model
     {
         $model = LaravelPayments::resolveCustomerModel();
 
-        return $model::firstOrCreate([
+        $customer = $model::firstOrCreate([
             'billable_id' => $billableId,
             'billable_type' => Relation::getMorphAlias($billableType),
-            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
         ], [
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
             'provider_id' => $customerId,
-        ])->billable;
+        ]);
+
+        return $customer->billable ?? null;
     }
 
     /**
