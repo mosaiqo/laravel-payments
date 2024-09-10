@@ -86,4 +86,14 @@ class PlanMapper extends Facade
             return $plans;
         }
     }
+
+    public function byProductId($productId)
+    {
+        return $this->get()->firstWhere('id', $productId) ?? [];
+    }
+
+    public function bySlug($slug)
+    {
+        return $this->get()->firstWhere('slug', $slug) ?? [];
+    }
 }

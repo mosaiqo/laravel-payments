@@ -25,6 +25,10 @@ class PaymentsService
 
     public static function checkout($variant, $discountCode = null, ?Model $billable = null)
     {
+        if ($billable?->subscribed()) {
+            return (object) ['url' => $billable->customerPortalUrl()];
+        }
+
         return (new static())->client->checkout($variant, $discountCode, $billable);
     }
 
@@ -39,9 +43,26 @@ class PaymentsService
         );
     }
 
+    public static function product($productId, $variantId = null)
+    {
+        $instance = new static();
+        return $instance->getProduct($productId, $variantId);
+
+    }
+
     protected function getProducts()
     {
         return $this->client->products();
+    }
+
+    protected function getCustomerPortalLink($customerId)
+    {
+        return $this->client->getCustomerPortalLink($customerId);
+    }
+
+     protected function getProduct($productId, $variantId = null)
+    {
+        return $this->client->product($productId, $variantId);
     }
 
 

@@ -2,9 +2,9 @@
 
 namespace Mosaiqo\LaravelPayments\Events;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use Mosaiqo\LaravelPayments\Models\Customer;
 use Mosaiqo\LaravelPayments\Models\Subscription;
 
 class SubscriptionResumed
@@ -12,9 +12,9 @@ class SubscriptionResumed
     use Dispatchable, SerializesModels;
 
     /**
-     * The billable entity.
+     * The customer entity.
      */
-    public Model $billable;
+    public Customer $customer;
 
     /**
      * The subscription instance.
@@ -26,9 +26,9 @@ class SubscriptionResumed
      */
     public array $payload;
 
-    public function __construct(Model $billable, Subscription $subscription, array $payload)
+    public function __construct(Customer $customer, Subscription $subscription, array $payload)
     {
-        $this->billable = $billable;
+        $this->customer = $customer;
         $this->subscription = $subscription;
         $this->payload = $payload;
     }

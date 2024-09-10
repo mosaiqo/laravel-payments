@@ -7,11 +7,14 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Mosaiqo\LaravelPayments\Database\Factories\OrderFactory;
+use Mosaiqo\LaravelPayments\LaravelPayments;
 
 /**
  * @property mixed $status
+ * @property \Mosaiqo\LaravelPayments\Models\Customer $customer
  */
 class Order extends Model
 {
@@ -56,7 +59,12 @@ class Order extends Model
      */
     public function billable(): MorphTo
     {
-        return $this->morphTo();
+        return $this->customer->billable();
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class, 'payments_customer_id', 'id');
     }
 
     /**

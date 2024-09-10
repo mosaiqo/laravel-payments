@@ -10,6 +10,7 @@ return new class extends Migration
     {
         Schema::create('payments_webhooks', function (Blueprint $table) {
             $table->id();
+            $table->string('unique_id')->unique();
             $table->text('body')->nullable();
             $table->text('headers')->nullable();
             $table->string('provider')->nullable();

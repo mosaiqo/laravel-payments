@@ -20,6 +20,14 @@ class LemonSqueezyPlanMapper
         };
     }
 
+    protected static function isFree($slug)
+    {
+        return match ($slug) {
+            'free' => true,
+            default => false
+        };
+    }
+
     protected static function featured($name)
     {
         return match ($name) {
@@ -45,19 +53,22 @@ class LemonSqueezyPlanMapper
         return [
             'id' => $plan->id,
             'name' => $plan->name,
+            'slug' => $plan->slug,
             'description' => $plan->description,
             'price' => $plan->price,
-            'formated_price' => Cashier::formatAmount($plan->price),
+            'formated_price' => LaravelPayments::formatAmount($plan->price),
             'discounted_price' => $discounted_price,
-            'formated_discounted_price' => Cashier::formatAmount($discounted_price),
+            'formated_discounted_price' => LaravelPayments::formatAmount($discounted_price),
             "featured" => self::featured($plan->name),
             "intervals" => self::intervals($plan),
             "features" => $product->features ?? [],
             "features_compare" => $product->features_compare ?? false,
+            'options' => self::getFeatures($plan),
             "href" => $plan->buy_now_url,
             "sort_order" => $product->sort_order,
             "cta" => $product->cta ?? null,
             "cta_message" => $product->cta_message ?? null,
+            'is_free' => static::isFree($plan->slug),
         ];
     }
 
@@ -68,13 +79,23 @@ class LemonSqueezyPlanMapper
                 $key = IntervalKeyMapper::map($variant['interval'], $variant['interval_count']);
                 $checkout = self::$cache ? self::getCachedCheckout($variant, $key) ?? null : self::getCheckout($variant, $key);
                 $checkout = (object) $checkout;
-                $variant['price_formatted'] = Cashier::formatAmount($variant['price']);
+                $variant['price_formatted'] = LaravelPayments::formatAmount($variant['price']);
                 $variant['discounted_price'] = $checkout->has_discount ? $checkout?->total : null;
-                $variant['discounted_price_formatted'] = $checkout->has_discount ? Cashier::formatAmount($variant['discounted_price']) : null;
-                $variant['href'] = $checkout?->url;
+                $variant['discounted_price_formatted'] = $checkout->has_discount ? LaravelPayments::formatAmount($variant['discounted_price']) : null;
+                $variant['href'] = static::isFree($plan->slug)
+                    ? route('register')
+                    : $checkout?->url;
+
                 return [$key => $variant];
             });
     }
+
+    protected static function getFeatures($plan)
+    {
+        $slug = self::slug($plan->name);
+        return config("plans.features.{$slug}");
+    }
+
 
     protected static function getCachedCheckout($variant, $key)
     {
@@ -105,7 +126,7 @@ class LemonSqueezyPlanMapper
             'url' => route("payments.checkouts", [
                 "product" => $variant['product_id'],
                 "variant" => $variant['id'],
-                "discount" => $discountCode
+                "discount" => $discountCode,
             ]),
 //            'url' => $checkout->url,
             'has_discount' => $checkout->preview['discount_total'] > 0,

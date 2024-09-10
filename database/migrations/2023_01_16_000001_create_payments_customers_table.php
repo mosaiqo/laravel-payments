@@ -10,8 +10,7 @@ return new class extends Migration
     {
         Schema::create('payments_customers', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('billable_id')->nullable();
-            $table->string('billable_type')->nullable();
+            $table->nullableMorphs('billable');
             $table->string('provider');
             $table->string('provider_id')->nullable();
             $table->string('name')->nullable();

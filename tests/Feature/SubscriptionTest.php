@@ -16,6 +16,7 @@ it('can change the billing cycle anchor on a subscription', function () {
 
     $subscription = Subscription::factory()->create([
         'provider_id' => '12345',
+        'customer_id' => 'cus_123',
         'status' => Subscription::STATUS_ACTIVE,
     ]);
 
@@ -53,6 +54,7 @@ it('can end a trial', function () {
 
     $subscription = Subscription::factory()->create([
         'provider_id' => '12345',
+        'customer_id' => 'cus_123',
         'status' => Subscription::STATUS_ACTIVE,
     ]);
 
@@ -88,7 +90,9 @@ it('can swap a subscription', function () {
         'payments.providers.lemon-squeezy.api_key' => 'fake_key',
     ]);
 
-    $subscription = Subscription::factory()->create();
+    $subscription = Subscription::factory()->create([
+        'customer_id' => 'cus_123',
+    ]);
 
     Http::fake([
         'api.lemonsqueezy.com/*' => function (\Illuminate\Http\Client\Request $request) {
@@ -119,10 +123,11 @@ it('avoids prorating on subscription swap', function () {
         'payments.providers.lemon-squeezy.store' => 'store_12345',
         'payments.providers.lemon-squeezy.api_key' => 'fake_key',
     ]);
-    $subscription = Subscription::factory()->create();
+    $subscription = Subscription::factory()->create([
+        'customer_id' => 'cus_123',
+    ]);
     Http::fake([
         'api.lemonsqueezy.com/*' => function (\Illuminate\Http\Client\Request $request) {
-//            dd($request->data());
             expect(collect($request->data())->pluck('attributes')->first())
                 ->toMatchArray([
                     'product_id' => '12345',
@@ -152,7 +157,9 @@ it('forces prorating on subscription swap', function () {
         'payments.providers.lemon-squeezy.store' => 'store_12345',
         'payments.providers.lemon-squeezy.api_key' => 'fake_key',
     ]);
-    $subscription = Subscription::factory()->create();
+    $subscription = Subscription::factory()->create([
+        'customer_id' => 'cus_123',
+    ]);
     Http::fake([
         'api.lemonsqueezy.com/*' => function (\Illuminate\Http\Client\Request $request) {
 //            dd($request->data());
@@ -186,7 +193,9 @@ it('can swap a subscription with instant invoice', function () {
         'payments.providers.lemon-squeezy.api_key' => 'fake_key',
     ]);
 
-    $subscription = Subscription::factory()->create();
+    $subscription = Subscription::factory([
+        'customer_id' => 'cus_123',
+    ])->create();
 
     Http::fake([
         'api.lemonsqueezy.com/*' => function (\Illuminate\Http\Client\Request $request) {
@@ -222,6 +231,7 @@ it('can cancel a subscription', function () {
 
     $subscription = Subscription::factory()->create([
         'provider_id' => '12345',
+        'customer_id' => 'cus_123',
         'status' => Subscription::STATUS_ACTIVE,
     ]);
 
@@ -257,6 +267,7 @@ it('can resume a subscription', function () {
 
     $subscription = Subscription::factory()->create([
         'provider_id' => '12345',
+        'customer_id' => 'cus_123',
         'status' => Subscription::STATUS_CANCELED,
     ]);
 
@@ -293,12 +304,12 @@ it('can\'t resume a subscription if expired', function () {
 
     $subscription = Subscription::factory()->create([
         'provider_id' => '12345',
+        'customer_id' => 'cus_123',
         'status' => Subscription::STATUS_EXPIRED,
     ]);
 
     $subscription = $subscription->resume();
     expect($subscription)->toMatchArray(['provider_id' => '12345', 'status' => Subscription::STATUS_ACTIVE]);
-
 });
 
 it('can pause a subscription', function () {
@@ -310,6 +321,7 @@ it('can pause a subscription', function () {
 
     $subscription = Subscription::factory()->create([
         'provider_id' => '12345',
+        'customer_id' => 'cus_123',
         'status' => Subscription::STATUS_ACTIVE,
     ]);
 
@@ -347,6 +359,7 @@ it('can pause a subscription for free', function () {
 
     $subscription = Subscription::factory()->create([
         'provider_id' => '12345',
+        'customer_id' => 'cus_123',
         'status' => Subscription::STATUS_ACTIVE,
     ]);
 
@@ -384,6 +397,7 @@ it('can unpause a subscription', function () {
 
     $subscription = Subscription::factory()->create([
         'provider_id' => '12345',
+        'customer_id' => 'cus_123',
         'status' => Subscription::STATUS_PAUSED,
     ]);
 
@@ -421,6 +435,7 @@ it('can update payment method url a subscription', function () {
 
     $subscription = Subscription::factory()->create([
         'provider_id' => '12345',
+        'customer_id' => 'cus_123',
         'status' => Subscription::STATUS_ACTIVE,
     ]);
 
@@ -453,13 +468,13 @@ it('can returns only correct when scoped', function () {
         'payments.providers.lemon-squeezy.api_key' => 'fake_key',
     ]);
     Subscription::factory()->createMany([
-        ['status' => Subscription::STATUS_ON_TRIAL],
-        ['status' => Subscription::STATUS_ACTIVE],
-        ['status' => Subscription::STATUS_PAUSED],
-        ['status' => Subscription::STATUS_PAST_DUE],
-        ['status' => Subscription::STATUS_UNPAID],
-        ['status' => Subscription::STATUS_CANCELED],
-        ['status' => Subscription::STATUS_EXPIRED],
+        ['status' => Subscription::STATUS_ON_TRIAL, 'customer_id' => 'cus_123'],
+        ['status' => Subscription::STATUS_ACTIVE, 'customer_id' => 'cus_124'],
+        ['status' => Subscription::STATUS_PAUSED, 'customer_id' => 'cus_125'],
+        ['status' => Subscription::STATUS_PAST_DUE, 'customer_id' => 'cus_126'],
+        ['status' => Subscription::STATUS_UNPAID, 'customer_id' => 'cus_127'],
+        ['status' => Subscription::STATUS_CANCELED, 'customer_id' => 'cus_128'],
+        ['status' => Subscription::STATUS_EXPIRED, 'customer_id' => 'cus_129'],
     ]);
 
     $items = Subscription::query()->onTrial()->get();
@@ -511,7 +526,12 @@ it('can determine if the subscription is within grace period', function () {
         'payments.providers.lemon-squeezy.store' => 'store_12345',
         'payments.providers.lemon-squeezy.api_key' => 'fake_key',
     ]);
-    $subscription = Subscription::factory()->create(['status' => Subscription::STATUS_CANCELED, 'ends_at' => now()->add(1, 'day')]);
+    $subscription = Subscription::factory()->create([
+            'customer_id' => 'cus_123',
+            'status' => Subscription::STATUS_CANCELED,
+            'ends_at' => now()->add(1, 'day'),
+        ]
+    );
 
     expect($subscription->onGracePeriod())->toBeTrue();
 });
@@ -522,7 +542,12 @@ it('can determine if the subscription is on paused period', function () {
         'payments.providers.lemon-squeezy.store' => 'store_12345',
         'payments.providers.lemon-squeezy.api_key' => 'fake_key',
     ]);
-    $subscription = Subscription::factory()->create(['status' => Subscription::STATUS_PAUSED, 'pause_resumes_at' => now()->add(1, 'day')]);
+    $subscription = Subscription::factory()->create([
+            'customer_id' => 'cus_123',
+            'status' => Subscription::STATUS_PAUSED,
+            'pause_resumes_at' => now()->add(1, 'day'),
+        ]
+    );
 
     expect($subscription->onPausedPeriod())->toBeTrue();
 });

@@ -12,10 +12,10 @@ trait ManagesSubscriptions
     /**
      * Get all of the subscriptions for the billable.
      */
-    public function subscriptions(): MorphMany
+    public function subscriptions()
     {
-        $model = LaravelPayments::resolveSubscriptionModel();
-        return $this->morphMany($model, 'billable')->orderByDesc('created_at');
+        return $this->customer?->subscriptions()
+            ->orderByDesc('created_at');
     }
 
     /**
@@ -23,7 +23,7 @@ trait ManagesSubscriptions
      */
     public function subscription(string $type = 'default'): ?Subscription
     {
-        return $this->subscriptions()->where('type', $type)->first();
+        return $this->subscriptions()?->where('type', $type)->first();
     }
 
     /**

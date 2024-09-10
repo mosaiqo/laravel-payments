@@ -2,6 +2,7 @@
 
 namespace Mosaiqo\LaravelPayments;
 
+use Dflydev\DotAccessData\Data;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Money\Currencies\ISOCurrencies;
@@ -10,6 +11,7 @@ use Money\Formatter\IntlMoneyFormatter;
 use Money\Money;
 use Mosaiqo\LaravelPayments\ApiClients\ApiClient;
 use Mosaiqo\LaravelPayments\Exceptions\MissingProvider;
+use Mosaiqo\LaravelPayments\Exceptions\WebhookDuplicated;
 use Mosaiqo\LaravelPayments\Http\Middleware\LemonSqueezyVerifyWebhookSignature;
 use Mosaiqo\LaravelPayments\Http\Middleware\StripeVerifyWebhookSignature;
 use Mosaiqo\LaravelPayments\Models\Customer;
@@ -34,6 +36,13 @@ class LaravelPayments
         self::PROVIDER_LEMON_SQUEEZY,
         self::PROVIDER_STRIPE,
     ];
+
+    /**
+     * The custom currency formatter.
+     *
+     * @var callable
+     */
+    protected static $formatCurrencyUsing;
 
     /**
      * Indicates if missing providers should be allowed.
@@ -110,7 +119,7 @@ class LaravelPayments
 
     public static bool $asyncWebhooks = false;
 
-    public static bool $storeWebhooks = false;
+    public static bool $storeWebhooks = true;
 
     public static function storeWebhooks(bool $store = true): void
     {
@@ -414,16 +423,56 @@ class LaravelPayments
         return $instance->allowedProviders;
     }
 
-    public static function queueWebhook(Request $request)
+    public static function getUniqueWebhookId(Request $request)
+    {
+        switch (LaravelPayments::getProvider()) {
+            case LaravelPayments::PROVIDER_STRIPE:
+                return $request->header('Stripe-Signature');
+            case LaravelPayments::PROVIDER_LEMON_SQUEEZY:
+                return $request->header('x-signature'). '-'.$request->header('x-event-name');
+        }
+    }
+
+    /**
+     * @throws \Mosaiqo\LaravelPayments\Exceptions\WebhookDuplicated
+     */
+    public static function storeWebhook(Request $request): void
     {
         $model = static::resolveWebhooksModel();
+        $uniqueId = static::getUniqueWebhookId($request);
+
+        if ($model::where('unique_id', $uniqueId)->exists()) {
+            throw new WebhookDuplicated();
+        }
 
         $model::create([
+            'unique_id' => $uniqueId,
             'body' => $request->all(),
             'headers' => $request->header(),
             'provider' => static::getProvider(),
         ]);
     }
+
+    public static function markWebhookAsProcessed(Request $request): void
+    {
+        $model = static::resolveWebhooksModel();
+        $uniqueId = static::getUniqueWebhookId($request);
+        $model::where('unique_id', $uniqueId)->update([
+            'processed_at' => now(),
+        ]);
+    }
+
+    /**
+     * Set the custom currency formatter.
+     *
+     * @param  callable  $callback
+     * @return void
+     */
+    public static function formatCurrencyUsing(callable $callback)
+    {
+        static::$formatCurrencyUsing = $callback;
+    }
+
 
     /**
      * @param int    $amount
@@ -431,9 +480,13 @@ class LaravelPayments
      *
      * @return string
      */
-    public static function formatAmount(int $amount, string $currency, ?string $locale = null, array $options = []): string
+    public static function formatAmount(int $amount, ?string $currency = null, ?string $locale = null, array $options = []): string
     {
-        $money = new Money($amount, new Currency(strtoupper($currency)));
+        if (static::$formatCurrencyUsing) {
+            return call_user_func(static::$formatCurrencyUsing, $amount, $currency, $locale, $options);
+        }
+
+        $money = new Money($amount, new Currency(strtoupper($currency ?? config('cashier.currency'))));
 
         $locale = $locale ?? static::resolveProviderConfig()['currency_locale'];
 

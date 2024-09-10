@@ -54,9 +54,14 @@ it('returns billable from order', function () {
     ]);
 
     $user = \Tests\Fixtures\User::factory()->create();
+    $customer = $user->createAsCustomer([
+        'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+        'provider_id' => 'cus_123',
+        'email' => 'johndoe@email.com',
+        'name' => 'John Doe',
+    ]);
     $order = Order::factory()->create([
-        'billable_id' => $user->id,
-        'billable_type' => $user->getMorphClass(),
+        'payments_customer_id' => $customer->id
     ]);
 
     expect($order->billable)->not()->toBeNull();

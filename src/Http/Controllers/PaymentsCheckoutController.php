@@ -10,18 +10,19 @@ use Mosaiqo\LaravelPayments\PaymentsService;
 
 class PaymentsCheckoutController extends Controller
 {
-    public function __construct()
+    public function __construct(Request $request)
     {
-        $this->middleware('web');
+        $middleware = ['web'];
+        $this->middleware($middleware);
     }
 
     public function __invoke(Request $request, $product, $variant = null)
     {
+
         $billable = LaravelPayments::resolveBillableForUser($request->user());
         $discountCode = $request->input('discount');
 
         $checkout = PaymentsService::checkout($variant, $discountCode, $billable);
-
         return redirect($checkout->url);
     }
 }

@@ -7,10 +7,12 @@ use Illuminate\Routing\Controller;
 use Mosaiqo\LaravelPayments\Events\WebhookHandled;
 use Mosaiqo\LaravelPayments\Events\WebhookFailed;
 use Mosaiqo\LaravelPayments\Events\WebhookReceived;
+use Mosaiqo\LaravelPayments\Events\WebhookSkipped;
 use Mosaiqo\LaravelPayments\Events\WebhookUnhandled;
 use Mosaiqo\LaravelPayments\Exceptions\HandleEventMethodNotImplemented;
 use Mosaiqo\LaravelPayments\Exceptions\InvalidEventName;
 use Mosaiqo\LaravelPayments\Exceptions\InvalidCustomPayload;
+use Mosaiqo\LaravelPayments\Exceptions\WebhookDuplicated;
 use Mosaiqo\LaravelPayments\LaravelPayments;
 
 use LemonSqueezy\Laravel\Http\Middleware\VerifyWebhookSignature;
@@ -38,11 +40,17 @@ final class PaymentsWebhookController extends Controller
 
         $payload = $request->all();
         WebhookReceived::dispatch($payload);
-
-        if (LaravelPayments::$asyncWebhooks) {
-            LaravelPayments::queueWebhook($request);
-            WebhookHandled::dispatch($payload);
-            return response('Webhook was handled.');
+        try {
+        if (LaravelPayments::$storeWebhooks) {
+                LaravelPayments::storeWebhook($request);
+            if (LaravelPayments::$asyncWebhooks) {
+                WebhookHandled::dispatch($payload);
+                return response('Webhook was handled.');
+            }
+        }
+        } catch (WebhookDuplicated $e) {
+            WebhookSkipped::dispatch($payload, $e);
+            return response('Webhook skipped due to duplicate.');
         }
 
         $handler = LaravelPayments::resolveProviderWebhookHandler();
@@ -63,14 +71,19 @@ final class PaymentsWebhookController extends Controller
                 // @codeCoverageIgnoreStart
             }
             catch (\Exception $e) {
+                throw $e;
                 WebhookFailed::dispatch($payload, $e);
                 return response('Webhook failed to be handled.');
             }
             // @codeCoverageIgnoreEnd
+
+            if(LaravelPayments::$storeWebhooks && !LaravelPayments::$asyncWebhooks) {
+                LaravelPayments::markWebhookAsProcessed($request);
+            }
+
             WebhookHandled::dispatch($payload);
             return response('Webhook was handled.');
         }
-
         WebhookUnhandled::dispatch($payload);
         return response('Webhook received but no handler found.');
     }

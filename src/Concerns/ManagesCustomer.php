@@ -27,11 +27,15 @@ trait ManagesCustomer
         return $this->customer()->create($attributes);
     }
 
-    public function customerPortalUrl(): string
+    public function customerPortalUrl(): ?string
     {
-        $response = LaravelPayments::api()->getCustomer($this->customer->provider_id);
+        if ($this->customer) {
+            $response = LaravelPayments::api()->getCustomer($this->customer->provider_id);
 
-        return $response['data']['attributes']['urls']['customer_portal'];
+            return $response['data']['attributes']['urls']['customer_portal'];
+        }
+
+        return null;
     }
 
     /**

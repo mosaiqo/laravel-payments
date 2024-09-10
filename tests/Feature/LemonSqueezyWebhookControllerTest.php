@@ -132,6 +132,303 @@ describe('Setup', function () {
         Event::assertDispatched(WebhookReceived::class);
         Event::assertDispatched(WebhookFailed::class);
     });
+    it('handles saves webhook', function () {
+        Event::fake();
+        config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
+        LaravelPayments::storeWebhooks();
+        $response = $this->postJson(route('payments.webhooks'), [
+            'meta' => [
+                'event_name' => 'order_created',
+                'custom_data' => ['billable_id' => 1, 'billable_type' => User::class],
+            ],
+            'data' => [
+                'id' => 'ord_123',
+                'attributes' => [
+                    'customer_id' => 'cus_123',
+                    'first_order_item' => [
+                        'product_id' => 'pro_123',
+                        'variant_id' => 'var_123',
+                    ],
+                    'user_name' => 'John Doe',
+                    'user_email' => 'johndoe@email.com',
+                    'identifier' => 'order_123',
+                    'order_number' => '123',
+                    'currency' => 'usd',
+                    'subtotal' => 1000,
+                    'discount_total' => 0,
+                    'tax' => 50,
+                    'total' => 1050,
+                    'tax_name' => 'VAT',
+                    'status' => 'paid',
+                    'urls' => ['receipt' => 'http://example.com/receipt'],
+                    'refunded' => false,
+                    'refunded_at' => null,
+                    'created_at' => now()->toIso8601String(),
+                ],
+            ],
+        ], ['x-foo' => 'bar']);
+
+        expect(LaravelPayments::$storeWebhooks)->toBeTrue();
+        expect(LaravelPayments::$asyncWebhooks)->toBeFalse();
+        $response->assertStatus(200);
+        $response->assertSee('Webhook was handled.');
+        $webhook = LaravelPayments::resolveWebhooksModel()::first();
+        $this->assertNotNull($webhook);
+
+        expect($webhook->body)
+            ->toMatchArray([
+                'meta' => [
+                    'event_name' => 'order_created',
+                    'custom_data' => ['billable_id' => 1, 'billable_type' => User::class],
+                ],
+                'data' => [
+                    'id' => 'ord_123',
+                    'attributes' => [
+                        'customer_id' => 'cus_123',
+                        'first_order_item' => [
+                            'product_id' => 'pro_123',
+                            'variant_id' => 'var_123',
+                        ],
+                        'user_name' => 'John Doe',
+                        'user_email' => 'johndoe@email.com',
+                        'identifier' => 'order_123',
+                        'order_number' => '123',
+                        'currency' => 'usd',
+                        'subtotal' => 1000,
+                        'discount_total' => 0,
+                        'tax' => 50,
+                        'total' => 1050,
+                        'tax_name' => 'VAT',
+                        'status' => 'paid',
+                        'urls' => ['receipt' => 'http://example.com/receipt'],
+                        'refunded' => false,
+                        'refunded_at' => null,
+                        'created_at' => now()->toIso8601String(),
+                    ],
+                ],
+            ])
+            ->and($webhook->headers['x-foo'])->toBe(['bar']);
+        $this->assertDatabaseCount('payments_webhooks', 1);
+        $this->assertDatabaseCount('payments_customers', 1);
+        $this->assertDatabaseCount('payments_orders', 1);
+        $this->assertDatabaseEmpty('payments_subscriptions');
+
+        Event::assertDispatched(WebhookReceived::class);
+        Event::assertDispatched(WebhookHandled::class);
+    });
+    it('handles sets saved webhook to processed after processing', function () {
+        Event::fake();
+        config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
+        LaravelPayments::storeWebhooks();
+        $response = $this->postJson(route('payments.webhooks'), [
+            'meta' => [
+                'event_name' => 'order_created',
+                'custom_data' => ['billable_id' => 1, 'billable_type' => User::class],
+            ],
+            'data' => [
+                'id' => 'ord_123',
+                'attributes' => [
+                    'customer_id' => 'cus_123',
+                    'first_order_item' => [
+                        'product_id' => 'pro_123',
+                        'variant_id' => 'var_123',
+                    ],
+                    'user_name' => 'John Doe',
+                    'user_email' => 'johndoe@email.com',
+                    'identifier' => 'order_123',
+                    'order_number' => '123',
+                    'currency' => 'usd',
+                    'subtotal' => 1000,
+                    'discount_total' => 0,
+                    'tax' => 50,
+                    'total' => 1050,
+                    'tax_name' => 'VAT',
+                    'status' => 'paid',
+                    'urls' => ['receipt' => 'http://example.com/receipt'],
+                    'refunded' => false,
+                    'refunded_at' => null,
+                    'created_at' => now()->toIso8601String(),
+                ],
+            ],
+        ], [
+            'x-foo' => 'bar',
+            'x-signature' => 'correct-signature',
+        ]);
+
+        expect(LaravelPayments::$storeWebhooks)->toBeTrue();
+        expect(LaravelPayments::$asyncWebhooks)->toBeFalse();
+        $response->assertStatus(200);
+        $response->assertSee('Webhook was handled.');
+        $webhook = LaravelPayments::resolveWebhooksModel()::first();
+        $this->assertNotNull($webhook);
+
+        expect($webhook->body)
+            ->toMatchArray([
+                'meta' => [
+                    'event_name' => 'order_created',
+                    'custom_data' => ['billable_id' => 1, 'billable_type' => User::class],
+                ],
+                'data' => [
+                    'id' => 'ord_123',
+                    'attributes' => [
+                        'customer_id' => 'cus_123',
+                        'first_order_item' => [
+                            'product_id' => 'pro_123',
+                            'variant_id' => 'var_123',
+                        ],
+                        'user_name' => 'John Doe',
+                        'user_email' => 'johndoe@email.com',
+                        'identifier' => 'order_123',
+                        'order_number' => '123',
+                        'currency' => 'usd',
+                        'subtotal' => 1000,
+                        'discount_total' => 0,
+                        'tax' => 50,
+                        'total' => 1050,
+                        'tax_name' => 'VAT',
+                        'status' => 'paid',
+                        'urls' => ['receipt' => 'http://example.com/receipt'],
+                        'refunded' => false,
+                        'refunded_at' => null,
+                        'created_at' => now()->toIso8601String(),
+                    ],
+                ],
+            ])
+            ->and($webhook->headers['x-foo'])->toBe(['bar'])
+            ->and($webhook->processed_at)->not()->toBeNull();
+        $this->assertDatabaseCount('payments_webhooks', 1);
+        $this->assertDatabaseCount('payments_customers', 1);
+        $this->assertDatabaseCount('payments_orders', 1);
+        $this->assertDatabaseEmpty('payments_subscriptions');
+
+        Event::assertDispatched(WebhookReceived::class);
+        Event::assertDispatched(WebhookHandled::class);
+    });
+    it('rejects webhooks if they are already saved webhooks', function () {
+        Event::fake();
+        config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
+        LaravelPayments::storeWebhooks();
+        $response = $this->postJson(route('payments.webhooks'), [
+            'meta' => [
+                'event_name' => 'order_created',
+                'custom_data' => ['billable_id' => 1, 'billable_type' => User::class],
+            ],
+            'data' => [
+                'id' => 'ord_123',
+                'attributes' => [
+                    'customer_id' => 'cus_123',
+                    'first_order_item' => [
+                        'product_id' => 'pro_123',
+                        'variant_id' => 'var_123',
+                    ],
+                    'user_name' => 'John Doe',
+                    'user_email' => 'johndoe@email.com',
+                    'identifier' => 'order_123',
+                    'order_number' => '123',
+                    'currency' => 'usd',
+                    'subtotal' => 1000,
+                    'discount_total' => 0,
+                    'tax' => 50,
+                    'total' => 1050,
+                    'tax_name' => 'VAT',
+                    'status' => 'paid',
+                    'urls' => ['receipt' => 'http://example.com/receipt'],
+                    'refunded' => false,
+                    'refunded_at' => null,
+                    'created_at' => now()->toIso8601String(),
+                ],
+            ],
+        ], [
+            'x-foo' => 'bar',
+            'x-signature' => 'correct-signature',
+        ]);
+
+        expect(LaravelPayments::$storeWebhooks)->toBeTrue();
+        expect(LaravelPayments::$asyncWebhooks)->toBeFalse();
+        $response->assertStatus(200);
+        $response->assertSee('Webhook was handled.');
+        $webhook = LaravelPayments::resolveWebhooksModel()::first();
+        $this->assertNotNull($webhook);
+
+        expect($webhook->body)
+            ->toMatchArray([
+                'meta' => [
+                    'event_name' => 'order_created',
+                    'custom_data' => ['billable_id' => 1, 'billable_type' => User::class],
+                ],
+                'data' => [
+                    'id' => 'ord_123',
+                    'attributes' => [
+                        'customer_id' => 'cus_123',
+                        'first_order_item' => [
+                            'product_id' => 'pro_123',
+                            'variant_id' => 'var_123',
+                        ],
+                        'user_name' => 'John Doe',
+                        'user_email' => 'johndoe@email.com',
+                        'identifier' => 'order_123',
+                        'order_number' => '123',
+                        'currency' => 'usd',
+                        'subtotal' => 1000,
+                        'discount_total' => 0,
+                        'tax' => 50,
+                        'total' => 1050,
+                        'tax_name' => 'VAT',
+                        'status' => 'paid',
+                        'urls' => ['receipt' => 'http://example.com/receipt'],
+                        'refunded' => false,
+                        'refunded_at' => null,
+                        'created_at' => now()->toIso8601String(),
+                    ],
+                ],
+            ])
+            ->and($webhook->headers['x-foo'])->toBe(['bar'])
+            ->and($webhook->processed_at)->not()->toBeNull();
+        $this->assertDatabaseCount('payments_webhooks', 1);
+        $this->assertDatabaseCount('payments_customers', 1);
+        $this->assertDatabaseCount('payments_orders', 1);
+        $this->assertDatabaseEmpty('payments_subscriptions');
+
+        $response = $this->postJson(route('payments.webhooks'), [
+            'meta' => [
+                'event_name' => 'order_created',
+                'custom_data' => ['billable_id' => 1, 'billable_type' => User::class],
+            ],
+            'data' => [
+                'id' => 'ord_123',
+                'attributes' => [
+                    'customer_id' => 'cus_123',
+                    'first_order_item' => [
+                        'product_id' => 'pro_123',
+                        'variant_id' => 'var_123',
+                    ],
+                    'user_name' => 'John Doe',
+                    'user_email' => 'johndoe@email.com',
+                    'identifier' => 'order_123',
+                    'order_number' => '123',
+                    'currency' => 'usd',
+                    'subtotal' => 1000,
+                    'discount_total' => 0,
+                    'tax' => 50,
+                    'total' => 1050,
+                    'tax_name' => 'VAT',
+                    'status' => 'paid',
+                    'urls' => ['receipt' => 'http://example.com/receipt'],
+                    'refunded' => false,
+                    'refunded_at' => null,
+                    'created_at' => now()->toIso8601String(),
+                ],
+            ],
+        ], [
+            'x-foo' => 'bar',
+            'x-signature' => 'correct-signature',
+        ]);
+        $this->assertDatabaseCount('payments_webhooks', 1);
+        $this->assertDatabaseCount('payments_customers', 1);
+        $this->assertDatabaseCount('payments_orders', 1);
+        Event::assertDispatched(WebhookReceived::class);
+        Event::assertDispatched(WebhookHandled::class);
+    });
     it('handles saves webhook call to process it later', function () {
         Event::fake();
         config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
@@ -165,7 +462,14 @@ describe('Orders', function () {
     it('handles order created event', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
         Event::fake();
-        User::newFactory()->create(['id' => 1]);
+        $user = User::newFactory()->create(['id' => 1]);
+        $customer = $user->createAsCustomer([
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
+
         $response = $this->postJson(route('payments.webhooks'), [
             'meta' => [
                 'event_name' => 'order_created',
@@ -179,6 +483,8 @@ describe('Orders', function () {
                         'product_id' => 'pro_123',
                         'variant_id' => 'var_123',
                     ],
+                    'user_name' => 'John Doe',
+                    'user_email' => 'johndoe@email.com',
                     'identifier' => 'order_123',
                     'order_number' => '123',
                     'currency' => 'usd',
@@ -203,12 +509,12 @@ describe('Orders', function () {
             'billable_id' => 1,
             'billable_type' => Relation::getMorphAlias(User::class),
             'provider_id' => 'cus_123',
-//            'email' => 'johndoe@email.com',
-//            'name' => 'John Doe',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
         ]);
 
         $this->assertDatabaseHas('payments_orders', [
-//            'payments_customer_id' => 1,
+            'payments_customer_id' => 1,
             'customer_id' => 'cus_123',
             'provider_id' => 'ord_123',
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
@@ -241,7 +547,7 @@ describe('Orders', function () {
                         'variant_id' => 'var_123',
                     ],
                     'user_name' => 'John Doe',
-                    'user_email' => 'john@doe.com',
+                    'user_email' => 'johndoe@email.com',
                     'identifier' => 'order_123',
                     'order_number' => '123',
                     'currency' => 'usd',
@@ -265,9 +571,12 @@ describe('Orders', function () {
         $this->assertDatabaseHas('payments_customers', [
             'provider_id' => 'cus_123',
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
         ]);
 
         $this->assertDatabaseHas('payments_orders', [
+            'payments_customer_id' => 1,
             'customer_id' => 'cus_123',
             'provider_id' => 'ord_123',
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
@@ -280,7 +589,13 @@ describe('Orders', function () {
     it('handles order refunded event when order is missing', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
         Event::fake();
-        User::newFactory()->create(['id' => 1]);
+        $user = User::newFactory()->create(['id' => 1]);
+        $customer = $user->createAsCustomer([
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
 
         $response = $this->postJson(route('payments.webhooks'), [
             'meta' => [
@@ -295,6 +610,8 @@ describe('Orders', function () {
                         'product_id' => 'pro_123',
                         'variant_id' => 'var_123',
                     ],
+                    'user_name' => 'John Doe',
+                    'user_email' => 'johndoe@email.com',
                     'identifier' => 'order_123',
                     'order_number' => '123',
                     'currency' => 'usd',
@@ -315,9 +632,12 @@ describe('Orders', function () {
         $response->assertSee('Webhook was handled.');
 
         $this->assertDatabaseHas('payments_customers', [
+            'provider_id' => 'cus_123',
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
             'billable_id' => 1,
             'billable_type' => Relation::getMorphAlias(User::class),
-            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
         ]);
 
         $this->assertDatabaseEmpty('payments_orders');
@@ -330,14 +650,20 @@ describe('Orders', function () {
     it('handles order refunded event when order is there', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
         Event::fake();
-        User::newFactory()->create(['id' => 1]);
+        $user = User::newFactory()->create(['id' => 1]);
+        $customer = $user->createAsCustomer([
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
         OrderFactory::new([
+            'payments_customer_id' => $customer->id,
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
             'customer_id' => 'cus_123',
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
             'provider_id' => 'ord_123',
-            'billable_type' => Relation::getMorphAlias(User::class),
         ])->paid()->create();
 
         $response = $this->postJson(route('payments.webhooks'), [
@@ -353,6 +679,8 @@ describe('Orders', function () {
                         'product_id' => 'pro_123',
                         'variant_id' => 'var_123',
                     ],
+                    'user_name' => 'John Doe',
+                    'user_email' => 'johndoe@email.com',
                     'identifier' => 'order_123',
                     'order_number' => '123',
                     'currency' => 'usd',
@@ -373,12 +701,16 @@ describe('Orders', function () {
         $response->assertSee('Webhook was handled.');
 
         $this->assertDatabaseHas('payments_customers', [
+            'provider_id' => 'cus_123',
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
             'billable_id' => 1,
             'billable_type' => Relation::getMorphAlias(User::class),
-            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
         ]);
 
         $this->assertDatabaseHas('payments_orders', [
+            'payments_customer_id' => 1,
             'customer_id' => 'cus_123',
             'provider_id' => 'ord_123',
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
@@ -398,6 +730,7 @@ describe('Subscriptions', function () {
         $user = User::newFactory()->create(['id' => 1]);
         $user->createAsCustomer([
             'trial_ends_at' => now()->addMonth(),
+
         ]);
 
         Event::fake();
@@ -410,6 +743,8 @@ describe('Subscriptions', function () {
             'data' => [
                 'id' => 'sub_123',
                 'attributes' => [
+                    'user_name' => 'John Doe',
+                    'user_email' => 'johndoe@email.com',
                     'customer_id' => 'cus_123',
                     'product_id' => 'pro_123',
                     'variant_id' => 'var_123',
@@ -423,16 +758,21 @@ describe('Subscriptions', function () {
                 ],
             ],
         ]);
+
         $response->assertStatus(200);
         $response->assertSee('Webhook was handled.');
 
         $this->assertDatabaseHas('payments_customers', [
+            'name' => 'John Doe',
+            'email' => 'johndoe@email.com',
             'billable_id' => 1,
             'billable_type' => Relation::getMorphAlias(User::class),
             'provider_id' => 'cus_123',
             'trial_ends_at' => null,
         ]);
         $this->assertDatabaseHas('payments_subscriptions', [
+            'payments_customer_id' => 1,
+            'customer_id' => 'cus_123',
             'provider_id' => 'sub_123',
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
         ]);
@@ -442,10 +782,6 @@ describe('Subscriptions', function () {
     });
     it('handles subscription created event for a non billables, eg. not logged in users', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
-        $user = User::newFactory()->create(['id' => 1]);
-        $user->createAsCustomer([
-            'trial_ends_at' => now()->addMonth(),
-        ]);
 
         LaravelPayments::allowNonAuthenticatedBillables();
         LaravelPayments::useBillableModel(User::class);
@@ -484,6 +820,8 @@ describe('Subscriptions', function () {
         $this->assertDatabaseHas('payments_customers', [
             'provider_id' => 'cus_123',
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'email' => 'john@doe.com',
+            'name' => 'John Doe',
         ]);
 
         $this->assertDatabaseHas('payments_subscriptions', [
@@ -498,15 +836,22 @@ describe('Subscriptions', function () {
     it('handles subscription updated event', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
         Event::fake();
-        User::newFactory()->create(['id' => 1]);
+        $user = User::newFactory()->create(['id' => 1]);
+        $customer = $user->createAsCustomer([
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
         SubscriptionFactory::new([
+            'payments_customer_id' => $customer->id,
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
             'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
-        ])->trialing()->create();
+            'customer_id' => 'cus_123',
+        ])->trialing()
+            ->create();
 
         $response = $this->postJson(route('payments.webhooks'), [
             'meta' => [
@@ -551,14 +896,20 @@ describe('Subscriptions', function () {
     it('handles subscription canceled event', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
         Event::fake();
-        User::newFactory()->create(['id' => 1]);
-        SubscriptionFactory::new([
+        $user = User::newFactory()->create(['id' => 1]);
+        $customer = $user->createAsCustomer([
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
+        SubscriptionFactory::new([
+            'payments_customer_id' => $customer->id,
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'customer_id' => 'cus_123',
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
             'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
         ])->active()->create();
 
         $endsAt = now()->addMonth()->toIso8601String();
@@ -606,14 +957,20 @@ describe('Subscriptions', function () {
     it('handles subscription resumed event', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
         Event::fake();
-        User::newFactory()->create(['id' => 1]);
-        SubscriptionFactory::new([
+        $user = User::newFactory()->create(['id' => 1]);
+        $customer = $user->createAsCustomer([
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
+        SubscriptionFactory::new([
+            'payments_customer_id' => $customer->id,
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'customer_id' => 'cus_123',
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
-            'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
+            'provider_id' => 'sub_123'
         ])->canceled()->create();
 
         $endsAt = now()->addMonth()->toIso8601String();
@@ -622,7 +979,6 @@ describe('Subscriptions', function () {
                 'event_name' => 'subscription_resumed',
                 'custom_data' => ['billable_id' => 1, 'billable_type' => User::class],
             ],
-
             'data' => [
                 'id' => 'sub_123',
                 'attributes' => [
@@ -661,14 +1017,20 @@ describe('Subscriptions', function () {
     it('handles subscription expired event', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
         Event::fake();
-        User::newFactory()->create(['id' => 1]);
-        SubscriptionFactory::new([
+        $user = User::newFactory()->create(['id' => 1]);
+        $customer = $user->createAsCustomer([
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
+        SubscriptionFactory::new([
+            'payments_customer_id' => $customer->id,
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'customer_id' => 'cus_123',
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
-            'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
+            'provider_id' => 'sub_123'
         ])->active()->create();
 
         $endsAt = now()->addMonth()->toIso8601String();
@@ -716,14 +1078,20 @@ describe('Subscriptions', function () {
     it('handles subscription paused event', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
         Event::fake();
-        User::newFactory()->create(['id' => 1]);
+        $user = User::newFactory()->create(['id' => 1]);
+        $customer = $user->createAsCustomer([
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
         SubscriptionFactory::new([
+            'payments_customer_id' => $customer->id,
+            'customer_id' => 'cus_123',
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
-            'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
+            'provider_id' => 'sub_123'
         ])->active()->create();
 
         $endsAt = now()->addMonth()->toIso8601String();
@@ -771,14 +1139,20 @@ describe('Subscriptions', function () {
     it('handles subscription un-paused event', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
         Event::fake();
-        User::newFactory()->create(['id' => 1]);
+        $user = User::newFactory()->create(['id' => 1]);
+        $customer = $user->createAsCustomer([
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
         SubscriptionFactory::new([
+            'payments_customer_id' => $customer->id,
+            'customer_id' => 'cus_123',
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
-            'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
+            'provider_id' => 'sub_123'
         ])->paused()->create();
 
         $endsAt = now()->addMonth()->toIso8601String();
@@ -826,14 +1200,20 @@ describe('Subscriptions', function () {
     it('handles subscription payment success event', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
         Event::fake();
-        User::newFactory()->create(['id' => 1]);
+        $user = User::newFactory()->create(['id' => 1]);
+        $customer = $user->createAsCustomer([
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
         SubscriptionFactory::new([
+            'payments_customer_id' => $customer->id,
+            'customer_id' => 'cus_123',
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
-            'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
+            'provider_id' => 'sub_123'
         ])->active()->create();
 
         $endsAt = now()->addMonth()->toIso8601String();
@@ -867,14 +1247,20 @@ describe('Subscriptions', function () {
     it('handles subscription payment failed event', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
         Event::fake();
-        User::newFactory()->create(['id' => 1]);
+        $user = User::newFactory()->create(['id' => 1]);
+        $customer = $user->createAsCustomer([
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
         SubscriptionFactory::new([
+            'payments_customer_id' => $customer->id,
+            'customer_id' => 'cus_123',
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
-            'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
+            'provider_id' => 'sub_123'
         ])->active()->create();
 
         $endsAt = now()->addMonth()->toIso8601String();
@@ -908,14 +1294,20 @@ describe('Subscriptions', function () {
     it('handles subscription payment recovered event', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
         Event::fake();
-        User::newFactory()->create(['id' => 1]);
+        $user = User::newFactory()->create(['id' => 1]);
+        $customer = $user->createAsCustomer([
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
         SubscriptionFactory::new([
+            'payments_customer_id' => $customer->id,
+            'customer_id' => 'cus_123',
             'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
-            'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
+            'provider_id' => 'sub_123'
         ])->active()->create();
 
         $endsAt = now()->addMonth()->toIso8601String();
@@ -952,7 +1344,13 @@ describe('License Keys', function () {
     it('handles license key created event', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
         Event::fake();
-        User::newFactory()->create(['id' => 1]);
+        $user = User::newFactory()->create(['id' => 1]);
+        $customer = $user->createAsCustomer([
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
         $response = $this->postJson(route('payments.webhooks'), [
             'meta' => [
                 'event_name' => 'license_key_created',
@@ -966,8 +1364,8 @@ describe('License Keys', function () {
                     'order_id' => 'cus_123',
                     'order_item_id' => 'cus_123',
                     'product_id' => 'cus_123',
-                    'user_name' => 'Boudy',
-                    'user_email' => 'boudy@mail.com',
+                    'user_name' => 'John Doe',
+                    'user_email' => 'johndoe@email.com',
                     'key' => '80e15db5-c796-436b-850c-8f9c98a48abe',
                     'key_short' => 'XXXX-8f9c98a48abe',
                     'activation_limit' => 5,
@@ -992,7 +1390,13 @@ describe('License Keys', function () {
     it('handles license key updated event', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_LEMON_SQUEEZY);
         Event::fake();
-        User::newFactory()->create(['id' => 1]);
+        $user = User::newFactory()->create(['id' => 1]);
+        $customer = $user->createAsCustomer([
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
         $response = $this->postJson(route('payments.webhooks'), [
             'meta' => [
                 'event_name' => 'license_key_updated',
@@ -1006,8 +1410,8 @@ describe('License Keys', function () {
                     'order_id' => 'cus_123',
                     'order_item_id' => 'cus_123',
                     'product_id' => 'cus_123',
-                    'user_name' => 'Boudy',
-                    'user_email' => 'boudy@mail.com',
+                    'user_name' => 'John Doe',
+                    'user_email' => 'johndoe@email.com',
                     'key' => '80e15db5-c796-436b-850c-8f9c98a48abe',
                     'key_short' => 'XXXX-8f9c98a48abe',
                     'activation_limit' => 5,

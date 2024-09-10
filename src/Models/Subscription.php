@@ -7,6 +7,7 @@ use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Mosaiqo\LaravelPayments\Models\Concerns\Prorates;
@@ -21,6 +22,7 @@ use Mosaiqo\LaravelPayments\Database\Factories\SubscriptionFactory;
  * @property ?string                                  $product_id
  * @property string                                   $provider_price_id
  * @property \Illuminate\Database\Eloquent\Collection $items
+ * @property \Mosaiqo\LaravelPayments\Models\Customer $customer
  */
 class Subscription extends Model
 {
@@ -71,7 +73,12 @@ class Subscription extends Model
      */
     public function billable(): MorphTo
     {
-        return $this->morphTo();
+        return $this->customer->billable();
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class, 'payments_customer_id', 'id');
     }
 
     /**

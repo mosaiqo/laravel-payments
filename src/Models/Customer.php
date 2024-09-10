@@ -4,6 +4,7 @@ namespace Mosaiqo\LaravelPayments\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Mosaiqo\LaravelPayments\Database\Factories\CustomerFactory;
 use Mosaiqo\LaravelPayments\Models\Concerns\BootsProviderScope;
@@ -33,13 +34,28 @@ class Customer extends Model
         'trial_ends_at' => 'datetime',
     ];
 
-
     /**
      * Get the billable model related to the customer.
      */
     public function billable(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    /**
+     * Get the subscriptions for the customer.
+     */
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class, 'payments_customer_id', 'id');
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function subscriptions(): HasMany
+    {
+        return $this->hasMany(Subscription::class, 'payments_customer_id', 'id');
     }
 
     /**

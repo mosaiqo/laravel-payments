@@ -2,10 +2,9 @@
 
 namespace Mosaiqo\LaravelPayments\Events;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
-use Mosaiqo\LaravelPayments\Models\Subscription;
+use Mosaiqo\LaravelPayments\Models\Customer;
 
 class LicenseKeyUpdated
 {
@@ -14,16 +13,16 @@ class LicenseKeyUpdated
     /**
      * The billable entity.
      */
-    public Model $billable;
+    public Customer $customer;
 
     /**
      * The payload array.
      */
     public array $payload;
 
-    public function __construct(Model $billable, array $payload)
+    public function __construct(Customer $customer, array $payload)
     {
-        $this->billable = $billable;
+        $this->customer = $customer;
         $this->payload = $payload;
     }
 }

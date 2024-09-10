@@ -1,5 +1,6 @@
 {
     "name": "mosaiqo/laravel-payments",
+    "description": "A Laravel package to handle payments",
     "version": "1.0.1",
     "authors": [
         {

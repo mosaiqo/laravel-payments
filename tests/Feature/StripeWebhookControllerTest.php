@@ -361,7 +361,6 @@ describe('Orders', function () {
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
             'provider_id' => 'ord_123',
-            'billable_type' => Relation::getMorphAlias(User::class),
         ])->paid()->create();
 
         $response = $this->postJson(route('payments.webhooks'), [
@@ -422,6 +421,10 @@ describe('Subscriptions', function () {
         $user = User::newFactory()->create(['id' => 1]);
         $user->createAsCustomer([
             'trial_ends_at' => now()->addMonth(),
+            'provider' => LaravelPayments::PROVIDER_STRIPE,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
         ]);
 
         Event::fake();
@@ -454,6 +457,7 @@ describe('Subscriptions', function () {
                 ],
             ],
         ]);
+
         $response->assertStatus(200);
         $response->assertSee('Webhook was handled.');
 
@@ -477,11 +481,6 @@ describe('Subscriptions', function () {
 
     it('handles subscription created event for a non billables, eg. not logged in users', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_STRIPE);
-        $user = User::newFactory()->create(['id' => 1]);
-        $user->createAsCustomer([
-            'provider' => LaravelPayments::PROVIDER_STRIPE,
-            'trial_ends_at' => now()->addMonth(),
-        ]);
 
         LaravelPayments::allowNonAuthenticatedBillables();
         LaravelPayments::useBillableModel(User::class);
@@ -541,14 +540,21 @@ describe('Subscriptions', function () {
     it('handles subscription updated event', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_STRIPE);
         Event::fake();
-        User::newFactory()->create(['id' => 1]);
+        $user = User::newFactory()->create(['id' => 1]);
+        $user->createAsCustomer([
+            'trial_ends_at' => now()->addMonth(),
+            'provider' => LaravelPayments::PROVIDER_STRIPE,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
         SubscriptionFactory::new([
             'provider' => LaravelPayments::PROVIDER_STRIPE,
+            'customer_id' => 'cus_123',
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
             'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
+            'payments_customer_id' => $user->customer->id,
         ])->trialing()->create();
 
         $response = $this->postJson(route('payments.webhooks'), [
@@ -598,14 +604,20 @@ describe('Subscriptions', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_STRIPE);
         Event::fake();
 
-        User::newFactory()->create(['id' => 1]);
+        $user = User::newFactory()->create(['id' => 1]);
+        $user->createAsCustomer([
+            'trial_ends_at' => now()->addMonth(),
+            'provider' => LaravelPayments::PROVIDER_STRIPE,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
         SubscriptionFactory::new([
             'provider' => LaravelPayments::PROVIDER_STRIPE,
+            'customer_id' => 'cus_123',
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
             'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
         ])->active()->create();
 
         $endsAt = now()->addMonth();
@@ -661,14 +673,20 @@ describe('Subscriptions', function () {
     it('handles subscription resumed event', function () {
         config()->set('payments.provider', LaravelPayments::PROVIDER_STRIPE);
         Event::fake();
-        User::newFactory()->create(['id' => 1]);
+        $user = User::newFactory()->create(['id' => 1]);
+        $user->createAsCustomer([
+            'trial_ends_at' => now()->addMonth(),
+            'provider' => LaravelPayments::PROVIDER_STRIPE,
+            'provider_id' => 'cus_123',
+            'email' => 'johndoe@email.com',
+            'name' => 'John Doe',
+        ]);
         SubscriptionFactory::new([
             'provider' => LaravelPayments::PROVIDER_STRIPE,
+            'customer_id' => 'cus_123',
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
             'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
         ])->canceled()->create();
 
         $response = $this->postJson(route('payments.webhooks'), [
@@ -722,8 +740,6 @@ describe('Subscriptions', function () {
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
             'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
         ])->active()->create();
 
         $endsAt = now()->addMonth()->toIso8601String();
@@ -777,9 +793,7 @@ describe('Subscriptions', function () {
             'provider' => LaravelPayments::PROVIDER_STRIPE,
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
-            'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
+            'provider_id' => 'sub_123'
         ])->active()->create();
 
         $endsAt = now()->addMonth()->toIso8601String();
@@ -834,8 +848,6 @@ describe('Subscriptions', function () {
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
             'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
         ])->paused()->create();
 
         $endsAt = now()->addMonth()->toIso8601String();
@@ -888,9 +900,7 @@ describe('Subscriptions', function () {
             'provider' => LaravelPayments::PROVIDER_STRIPE,
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
-            'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
+            'provider_id' => 'sub_123'
         ])->active()->create();
 
         $endsAt = now()->addMonth()->toIso8601String();
@@ -929,9 +939,7 @@ describe('Subscriptions', function () {
             'provider' => LaravelPayments::PROVIDER_STRIPE,
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
-            'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
+            'provider_id' => 'sub_123'
         ])->active()->create();
 
         $endsAt = now()->addMonth()->toIso8601String();
@@ -970,9 +978,7 @@ describe('Subscriptions', function () {
             'provider' => LaravelPayments::PROVIDER_STRIPE,
             'product_id' => 'pro_123',
             'variant_id' => 'var_123',
-            'provider_id' => 'sub_123',
-            'billable_id' => 1,
-            'billable_type' => Relation::getMorphAlias(User::class),
+            'provider_id' => 'sub_123'
         ])->active()->create();
 
         $endsAt = now()->addMonth()->toIso8601String();

@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Mosaiqo\LaravelPayments\LaravelPayments;
 
 return new class extends Migration
 {
@@ -10,10 +11,12 @@ return new class extends Migration
     {
         Schema::create('payments_subscriptions', function (Blueprint $table) {
             $table->id();
-            $table->nullableMorphs('billable');
+
             $table->string('type');
             $table->string('provider_id')->unique();
             $table->string('provider');
+            $table->string('customer_id');
+            $table->foreignIdFor(LaravelPayments::resolveCustomerModel(), 'payments_customer_id')->constrained()->nullable();
             $table->string('status');
             $table->string('price')->nullable();
             $table->string('product_id');

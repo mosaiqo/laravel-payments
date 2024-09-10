@@ -25,10 +25,9 @@ class OrderFactory extends Factory
     public function definition(): array
     {
         return [
-            'billable_id' => rand(1, 1000),
-            'billable_type' => 'App\\Models\\User',
             'provider_id' => rand(1, 1000),
             'provider' => $this->faker->randomElement(['lemon-squeezy', 'stripe', 'paypal']),
+            'payments_customer_id' => Customer::factory(),
             'customer_id' => rand(1, 1000),
             'product_id' => rand(1, 1000),
             'identifier' => rand(1, 1000),
@@ -48,19 +47,6 @@ class OrderFactory extends Factory
         ];
     }
 
-    /**
-     * Configure the model factory.
-     */
-    public function configure(): self
-    {
-        return $this->afterCreating(function ($order) {
-            CustomerFactory::new([
-                'billable_id' => $order->billable_id,
-                'billable_type' => $order->billable_type,
-                'provider' => $order->provider,
-            ])->create();
-        });
-    }
 
     /**
      * Mark the order as pending.

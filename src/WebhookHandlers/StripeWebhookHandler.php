@@ -55,12 +55,12 @@ class StripeWebhookHandler
      */
     protected function handleCustomerSubscriptionCreatedEvent(array $payload): void
     {
-        $billable = $this->resolveBillable($payload);
-        if (LaravelPayments::areNonAuthenticatedBillablesAllowed()) {
-            $model = app(LaravelPayments::resolveSubscriptionModel());
-        } else {
-            $model = $billable->subscriptions();
-        }
+        $customer = $this->resolveBillable($payload);
+//        if (LaravelPayments::areNonAuthenticatedBillablesAllowed()) {
+//            $model = app(LaravelPayments::resolveSubscriptionModel());
+//        } else {
+//            $model = $billable->subscriptions();
+//        }
 
 //        $model = $billable->subscriptions();
 
@@ -75,9 +75,10 @@ class StripeWebhookHandler
             $trialEndsAt = null;
         }
 
-        $subscription = $model->create([
+        $subscription = $customer->subscriptions()->create([
             'type' => $custom['type'] ?? $custom['name'] ?? Subscription::DEFAULT_TYPE,
             'provider_id' => $data['id'],
+            'customer_id' => $data['customer'],
             'provider' => LaravelPayments::PROVIDER_STRIPE,
             'status' => $data['status'],
             'product_id' => $isSinglePrice ? (string)  $firstItem['price']['product'] : null,
@@ -87,22 +88,22 @@ class StripeWebhookHandler
         ]);
 
         // Terminate the billable's generic trial at the model level if it exists...
-        if ($billable && !is_null($billable->customer->trial_ends_at)) {
-            $billable->customer->update(['trial_ends_at' => null]);
+        if (!is_null($customer?->trial_ends_at)) {
+            $customer?->update(['trial_ends_at' => null]);
         }
 
         // Set the billable's provide id if it was on generic trial at the model level
-        if ($billable && is_null($billable->customer->provider_id)) {
-            $billable->customer->update([
+        if (is_null($customer?->provider_id)) {
+            $customer?->update([
                 'provider_id' => $data['customer'],
             ]);
         }
 
-        SubscriptionCreated::dispatch($billable, $subscription, $payload);
+        SubscriptionCreated::dispatch($customer, $subscription, $payload);
     }
 
     protected function handleCustomerSubscriptionUpdatedEvent(array $payload): void {
-        $billable = $this->resolveBillable($payload);
+        $customer = $this->resolveBillable($payload);
 
         $data = $payload['data']['object'] ?? null;
         $providerId = $data['id'];
@@ -145,13 +146,13 @@ class StripeWebhookHandler
         $subscription->save();
 
         // Terminate the billable's generic trial at the model level if it exists...
-        if ($billable && !is_null($billable->customer->trial_ends_at)) {
-            $billable->customer->update(['trial_ends_at' => null]);
+        if (!is_null($customer?->trial_ends_at)) {
+            $customer?->update(['trial_ends_at' => null]);
         }
 
         // Set the billable's provide id if it was on generic trial at the model level
-        if ($billable && is_null($billable->customer->provider_id)) {
-            $billable->customer->update([
+        if (is_null($customer?->provider_id)) {
+            $customer?->update([
                 'provider_id' => $data['customer']
             ]);
         }
@@ -159,11 +160,11 @@ class StripeWebhookHandler
         $subscription->fresh();
 
         if ($previousStatus !== Subscription::STATUS_CANCELED && $subscription->status === Subscription::STATUS_CANCELED) {
-            SubscriptionCanceled::dispatch($billable, $subscription, $payload);
+            SubscriptionCanceled::dispatch($customer, $subscription, $payload);
         } else if ($previousStatus === Subscription::STATUS_CANCELED && $subscription->status === Subscription::STATUS_ACTIVE) {
-            SubscriptionResumed::dispatch($billable, $subscription, $payload);
+            SubscriptionResumed::dispatch($customer, $subscription, $payload);
         } else {
-            SubscriptionUpdated::dispatch($billable, $subscription, $payload);
+            SubscriptionUpdated::dispatch($customer, $subscription, $payload);
         }
 
     }
@@ -211,15 +212,32 @@ class StripeWebhookHandler
     private function findOrCreateCustomer(int|string|null $billableId, ?string $billableType, string $customerId, array $payload = null): ?Model
     {
         $model = LaravelPayments::resolveCustomerModel();
+
         $customer = $model::firstOrCreate([
             'billable_id' => $billableId,
             'billable_type' => Relation::getMorphAlias($billableType),
-            'provider' => LaravelPayments::PROVIDER_STRIPE,
         ], [
             'provider_id' => $customerId,
         ]);
 
-        return $customer->billable ?? null;
+//        if(!$customer->name || !$customer->email){
+//            $customer->update([
+//                'name' => $attributes['user_name'],
+//                'email' => $attributes['user_email'],
+//            ]);
+//        }
+//
+
+
+        if ($customer->wasRecentlyCreated) {
+            $customer->update([
+                'provider_id' => $customerId,
+                'provider' => LaravelPayments::PROVIDER_STRIPE,
+            ]);
+        }
+
+
+        return $customer ?? null;
     }
 
     /**

@@ -11,6 +11,7 @@ use Mosaiqo\LaravelPayments\LaravelPayments;
 class LemonSqueezyService implements PaymentsServiceProvider
 {
     private $client;
+    private mixed $store;
 
     public function __construct()
     {
@@ -23,7 +24,6 @@ class LemonSqueezyService implements PaymentsServiceProvider
           'discount_code' => $discountCode,
         ];
 
-
         if ($billable) {
             $checkout = $billable->checkout($variant, $options);
         } else {
@@ -32,6 +32,11 @@ class LemonSqueezyService implements PaymentsServiceProvider
         }
 
         return (object) $checkout->withoutVariants()->attributes();
+    }
+
+    public function getCustomerPortalLink($id)
+    {
+        return $this->client->getCustomer($id)->json('data.attributes.urls.customer_portal');
     }
 
     public function products()
@@ -63,5 +68,40 @@ class LemonSqueezyService implements PaymentsServiceProvider
                 $product['variants'] = $variants->where('product_id', $product['id'])->all();
                 return $product;
             });
+    }
+
+    public function product($productId, $variantId = null)
+    {
+        $storeId = $this->store;
+
+        $response = $this->client
+            ->get("products/{$productId}", [
+                'include' => 'variants'
+            ]);
+
+        $data = $response->json('data');
+        $included = $response->json('included');
+
+        $variants = collect($included)
+            ->filter(fn ($item) => $item['type'] === 'variants')
+            ->filter(fn ($item) => !$variantId || $item['id'] === $variantId)
+            ->map(function ($variant) {
+                $variant['attributes']['id'] = $variant['id'];
+                return $variant;
+            })
+            ->pluck('attributes');
+
+
+
+//        dd($variants, $data);
+        $product = collect([$data])
+            ->filter(fn ($product) => $product['attributes']['status'] === 'published')
+            ->map(function ($product) use ($variants) {
+                $productId = $product['id'];
+                $product = array_merge($product['attributes'], ['id' => $productId]);
+                $product['variants'] = $variants->where('product_id', $product['id'])->all();
+                return $product;
+            })->first();
+        dd($product);
     }
 }

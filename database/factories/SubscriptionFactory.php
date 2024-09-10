@@ -5,6 +5,7 @@ namespace  Mosaiqo\LaravelPayments\Database\Factories;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Mosaiqo\LaravelPayments\LaravelPayments;
+use Mosaiqo\LaravelPayments\Models\Customer;
 use  Mosaiqo\LaravelPayments\Models\Subscription;
 use Mosaiqo\LaravelPayments\Models\SubscriptionItem;
 
@@ -26,9 +27,9 @@ class SubscriptionFactory extends Factory
     {
         $provider = LaravelPayments::getProvider() ?? $this->faker->randomElement(LaravelPayments::allowedProviders());
         return [
-            'billable_id' => rand(1, 1000),
-            'billable_type' => LaravelPayments::resolveBillableModel() ?? 'App\\Models\\User',
             'type' => Subscription::DEFAULT_TYPE,
+            'payments_customer_id' => Customer::factory(),
+            'customer_id' => rand(1, 1000),
             'provider_id' => rand(1, 1000),
             'provider' => $provider,
             'status' => Subscription::STATUS_ACTIVE,
@@ -44,19 +45,6 @@ class SubscriptionFactory extends Factory
         ];
     }
 
-    /**
-     * Configure the model factory.
-     */
-    public function configure(): self
-    {
-        return $this->afterCreating(function ($subscription) {
-            CustomerFactory::new([
-                'billable_id' => $subscription->billable_id,
-                'billable_type' => $subscription->billable_type,
-                'provider' => $subscription->provider,
-            ])->create();
-        });
-    }
 
     /**
      * Mark the subscription as being within a trial period.

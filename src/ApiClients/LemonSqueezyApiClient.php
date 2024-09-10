@@ -178,9 +178,11 @@ class LemonSqueezyApiClient
         $response = $this->client->$method($uri, $payload);
 
         if ($response->failed()) {
+
+            $code = $response['errors'][0]['status'] ?? 200;
             throw new ApiError(
-                $response['errors'][0]['detail'],
-                (int) $response['errors'][0]['status']
+                $response['errors'][0]['detail'] ?? $response['message'],
+                    (int) $code ,
             );
         }
 

@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Mosaiqo\LaravelPayments\Database\Factories\SubscriptionFactory;
 use Mosaiqo\LaravelPayments\LaravelPayments;
 use Mosaiqo\LaravelPayments\Models\Customer;
 use Mosaiqo\LaravelPayments\Models\Subscription;
@@ -229,14 +230,21 @@ it('can determine the generic trial on a billable', function () {
 
 it('gets the current users subscription', function () {
     config()->set(['payments.provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY]);
-    $user = User::factory()->create();
-    Subscription::factory()->active()
-        ->create([
-            'id' => 1,
-            'provider' => 'lemon-squeezy',
-            'billable_id' => $user->id,
-            'billable_type' => $user->getMorphClass(),
-        ]);
+
+    $user = User::newFactory()->create(['id' => 1]);
+    $customer = $user->createAsCustomer([
+        'trial_ends_at' => now()->addMonth(),
+        'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+        'provider_id' => 'cus_123',
+        'email' => 'johndoe@email.com',
+        'name' => 'John Doe',
+    ]);
+    Subscription::newFactory()->create([
+        'payments_customer_id' => $customer->id,
+        'id' => 1,
+        'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+        'customer_id' => 'cus_123'
+    ]);
 
     $subscription = $user->subscription();
 
@@ -248,14 +256,20 @@ it('gets the current users subscription', function () {
 
 it('can determine if its subscribed', function () {
     config()->set(['payments.provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY]);
-    $user = User::factory()->create();
-
+    $user = User::newFactory()->create(['id' => 1]);
+    $user->createAsCustomer([
+        'trial_ends_at' => now()->addMonth(),
+        'provider' => LaravelPayments::PROVIDER_STRIPE,
+        'provider_id' => 'cus_123',
+        'email' => 'johndoe@email.com',
+        'name' => 'John Doe',
+    ]);
     Subscription::factory()->active()
         ->create([
+            'payments_customer_id' => $user->customer->id,
             'id' => 1,
-            'provider' => 'lemon-squeezy',
-            'billable_id' => $user->id,
-            'billable_type' => $user->getMorphClass(),
+            'provider' => LaravelPayments::PROVIDER_LEMON_SQUEEZY,
+            'customer_id' => 'cus_123',
         ]);
 
     expect($user->subscribed())->toBeTrue();
